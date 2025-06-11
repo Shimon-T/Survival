@@ -145,13 +145,19 @@ struct CategoryDetailView: View {
                                         .resizable()
                                         .aspectRatio(contentMode: .fit)
                                         .frame(width: 60, height: 60)
+                                        .clipShape(RoundedRectangle(cornerRadius: 50))
                                 } placeholder: {
                                     ProgressView()
                                 }
                             }
                             Text(gun.name)
                                 .font(.headline)
+                            Spacer()
                         }
+                        .padding()
+                        .background(Color(red: 245/255, green: 245/255, blue: 245/255))
+                        .cornerRadius(12)
+                        .shadow(radius: 1)
                         .padding(.horizontal)
                     }
                 }
@@ -193,15 +199,24 @@ struct WeaponSearchView: View {
                     .ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 0) {
-                        TextField("会社名や名前を入力", text: $searchText)
-                            .foregroundColor(.black)
-                            .placeholder(when: searchText.isEmpty) {
-                                Text("会社名や名前を入力")
-                                    .foregroundColor(.gray)
-                            }
-                            .padding(10)
-                            .submitLabel(.search)
+                    HStack {
+                        TextField("会社名や名前を入力", text: $searchText, onCommit: {
+                            performSearch()
+                        })
+                        .foregroundColor(.black)
+                        .padding(10)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.black, lineWidth: 1)
+                        )
+                        .placeholder(when: searchText.isEmpty) {
+                            Text("会社名や名前を入力")
+                                .foregroundColor(.gray)
+                                .padding(10)
+                        }
+
                         Button(action: {
                             print("🔘 検索ボタンがタップされました")
                             performSearch()
@@ -209,22 +224,13 @@ struct WeaponSearchView: View {
                             Image(systemName: "magnifyingglass")
                                 .foregroundColor(.black)
                                 .padding(10)
-                                .frame(height: 40)
                         }
-                        .contentShape(Rectangle())
-                        .allowsHitTesting(true)
-                    }
-                    .background(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.black, lineWidth: 1)
-                    )
-                    .cornerRadius(12)
-                    .onAppear {
-                        print("🔍 検索画面を開きました")
-                    }
-                    .onSubmit {
-                        performSearch()
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.black, lineWidth: 1)
+                        )
                     }
 
                     if searchResults.isEmpty && didSearch {
@@ -247,6 +253,7 @@ struct WeaponSearchView: View {
                                                         .resizable()
                                                         .aspectRatio(contentMode: .fit)
                                                         .frame(width: 60, height: 60)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 50))
                                                 } placeholder: {
                                                     ProgressView()
                                                 }
@@ -347,32 +354,43 @@ struct WeaponDetailView: View {
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
-        ZStack {
-            Color.white
-                .ignoresSafeArea()
+        NavigationView {
+            ZStack {
+                Color.white
+                    .ignoresSafeArea()
 
-            VStack(spacing: 20) {
-                if let url = gun.imageURL {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 200)
-                    } placeholder: {
-                        ProgressView()
+                VStack(spacing: 20) {
+                    if let url = gun.imageURL {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 50))
+                        } placeholder: {
+                            ProgressView()
+                        }
+                    }
+
+                    Text(gun.name)
+                        .font(.title)
+                        .padding()
+
+                    SwipeToAddButton {
+                        onAdd()
+                        presentationMode.wrappedValue.dismiss()
                     }
                 }
-
-                Text(gun.name)
-                    .font(.title)
-                    .padding()
-
-                SwipeToAddButton {
-                    onAdd()
-                    presentationMode.wrappedValue.dismiss()
+                .padding()
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("戻る") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
                 }
             }
-            .padding()
         }
     }
 }
@@ -380,14 +398,20 @@ struct WeaponDetailView: View {
 struct SwipeToAddButton: View {
     let onAdd: () -> Void
     @State private var offset: CGFloat = 0
+    @State private var didAnimate: Bool = false
+    @State private var animationTimer: Timer?
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.blue)
+                .fill(Color(UIColor { traitCollection in
+                    return traitCollection.userInterfaceStyle == .dark ? UIColor.white : UIColor.black
+                }))
                 .frame(height: 60)
             Text("スワイプして追加")
-                .foregroundColor(.white)
+                .foregroundColor(Color(UIColor { traitCollection in
+                    return traitCollection.userInterfaceStyle == .dark ? UIColor.black : UIColor.white
+                }))
         }
         .gesture(
             DragGesture()
@@ -411,7 +435,32 @@ struct SwipeToAddButton: View {
                 }
         )
         .offset(x: offset)
+        .onAppear {
+            guard !didAnimate else { return }
+            didAnimate = true
+
+            startBounceAnimation()
+            animationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+                startBounceAnimation()
+            }
+        }
+        .onDisappear {
+            animationTimer?.invalidate()
+            animationTimer = nil
+        }
         .animation(.spring(), value: offset)
     }
+
+    private func startBounceAnimation() {
+        guard offset == 0 else { return } // prevent animating if swipe has started
+
+        withAnimation(Animation.easeInOut(duration: 0.4)) {
+            offset = 20
+        }
+        DispatchQuçeue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(Animation.easeInOut(duration: 0.3)) {
+                offset = 0
+            }
+        }
+    }
 }
-  
