@@ -158,7 +158,10 @@ struct CategoryDetailView: View {
                                         .aspectRatio(contentMode: .fit)
                                         .frame(width: 60, height: 60)
                                         .clipShape(RoundedRectangle(cornerRadius: 50))
+<<<<<<< HEAD
                                         .overlay(RoundedRectangle(cornerRadius: 50).stroke(Color.gray, lineWidth: 2))
+=======
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
                                 } placeholder: {
                                     ProgressView()
                                 }
@@ -217,6 +220,7 @@ struct WeaponSearchView: View {
                         TextField("会社名や名前を入力", text: $searchText, onCommit: {
                             performSearch()
                         })
+<<<<<<< HEAD
                         .foregroundColor(colorScheme == .dark ? .white : .black)
                         .padding(10)
                         .background(colorScheme == .dark ? Color.black : Color.white)
@@ -228,6 +232,19 @@ struct WeaponSearchView: View {
                         .placeholder(when: searchText.isEmpty) {
                             Text("会社名や名前を入力")
                                 .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.5) : Color.black.opacity(0.5))
+=======
+                        .foregroundColor(.black)
+                        .padding(10)
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.black, lineWidth: 1)
+                        )
+                        .placeholder(when: searchText.isEmpty) {
+                            Text("会社名や名前を入力")
+                                .foregroundColor(.gray)
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
                                 .padding(10)
                         }
 
@@ -239,11 +256,19 @@ struct WeaponSearchView: View {
                                 .foregroundColor(colorScheme == .dark ? .white : .black)
                                 .padding(10)
                         }
+<<<<<<< HEAD
                         .background(colorScheme == .dark ? Color.black : Color.white)
                         .cornerRadius(12)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(colorScheme == .dark ? Color.white : Color.black, lineWidth: 1)
+=======
+                        .background(Color.white)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.black, lineWidth: 1)
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
                         )
                     }
 
@@ -268,7 +293,10 @@ struct WeaponSearchView: View {
                                                         .aspectRatio(contentMode: .fit)
                                                         .frame(width: 60, height: 60)
                                                         .clipShape(RoundedRectangle(cornerRadius: 50))
+<<<<<<< HEAD
                                                         .overlay(RoundedRectangle(cornerRadius: 50).stroke(Color.gray, lineWidth: 2))
+=======
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
                                                 } placeholder: {
                                                     ProgressView()
                                                 }
@@ -371,7 +399,11 @@ struct WeaponDetailView: View {
     var body: some View {
         NavigationView {
             ZStack {
+<<<<<<< HEAD
                 Color(UIColor.systemBackground)
+=======
+                Color.white
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
                     .ignoresSafeArea()
 
                 VStack(spacing: 20) {
@@ -379,6 +411,7 @@ struct WeaponDetailView: View {
                         AsyncImage(url: url) { image in
                             image
                                 .resizable()
+<<<<<<< HEAD
                                 .aspectRatio(contentMode: .fill)
                                 .frame(height: 200)
                                 .clipped()
@@ -387,6 +420,11 @@ struct WeaponDetailView: View {
                                     RoundedRectangle(cornerRadius: 50)
                                         .stroke(Color.gray, lineWidth: 2)
                                 )
+=======
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 50))
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
                         } placeholder: {
                             ProgressView()
                         }
@@ -424,10 +462,21 @@ struct SwipeToAddButton: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
+<<<<<<< HEAD
                 .fill(Color.primary)
                 .frame(height: 60)
             Text("スワイプして追加")
                 .foregroundColor(Color(UIColor.systemBackground))
+=======
+                .fill(Color(UIColor { traitCollection in
+                    return traitCollection.userInterfaceStyle == .dark ? UIColor.white : UIColor.black
+                }))
+                .frame(height: 60)
+            Text("スワイプして追加")
+                .foregroundColor(Color(UIColor { traitCollection in
+                    return traitCollection.userInterfaceStyle == .dark ? UIColor.black : UIColor.white
+                }))
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
         }
         .gesture(
             DragGesture()
@@ -473,11 +522,18 @@ struct SwipeToAddButton: View {
         withAnimation(Animation.easeInOut(duration: 0.4)) {
             offset = 20
         }
+<<<<<<< HEAD
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+=======
+        DispatchQuçeue.main.asyncAfter(deadline: .now() + 0.4) {
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
             withAnimation(Animation.easeInOut(duration: 0.3)) {
                 offset = 0
             }
         }
     }
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 804559e97eee42438a52a73468e722050fcc63be
