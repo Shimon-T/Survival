@@ -15,5 +15,7 @@
             </dict>
         </dict>
     </dict>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>このアプリは現在地を取得して、近くのサバゲーフィールドを表示するために位置情報を使用します。</string>
 </dict>
 </plist>

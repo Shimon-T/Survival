@@ -10,6 +10,10 @@ import SwiftUI
 struct ContentView: View {
     @State private var selectedTab = 0
 
+    init(selectedTab: Int = 0) {
+        _selectedTab = State(initialValue: selectedTab)
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             TodayView()
@@ -24,11 +28,17 @@ struct ContentView: View {
                 }
                 .tag(1)
             
+            FieldSearchView()
+                .tabItem {
+                    Label("フィールド", systemImage: "map.fill")
+                }
+                .tag(2)
+            
             SettingsView()
                 .tabItem {
                     Label("設定", systemImage: "gearshape.fill")
                 }
-                .tag(2)
+                .tag(3)
         }
     }
 }

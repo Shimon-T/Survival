@@ -17,7 +17,7 @@ struct SettingsView: View {
                 }
 
                 Section(header: Text("アプリ情報")) {
-                    Text("バージョン: 1.0.0")
+                    Text("beta 1.0")
                 }
             }
             .navigationTitle("設定")
