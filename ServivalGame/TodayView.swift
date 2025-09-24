@@ -25,6 +25,7 @@ struct TodayView: View {
     @State private var showGearViewSheet = false
     @State private var showAddJournalSheet = false
     @State private var showIconSelection = false
+    @State private var showPhotoLibrary = false
     @AppStorage("selectedIconName") private var selectedIconName: String = "d_icon_1"
     @AppStorage("userSelectedImageData") private var storedImageData: Data?
     @AppStorage("journalEntries") private var savedJournalEntriesData: Data = Data()
@@ -53,15 +54,28 @@ struct TodayView: View {
     }
 
     var body: some View {
-        mainContent
-            .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
-            .sheet(isPresented: $showGearViewSheet) {
-                GearView(startWithAddGear: true)
+        NavigationView {
+            ZStack {
+                Image("BackGround")
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                mainContent
             }
-            .sheet(isPresented: $showAddJournalSheet) {
-                JournalView(startWithAddEntry: true)
-                    .environmentObject(journalStore)
-            }
+        }
+        .photosPicker(isPresented: $showPhotoLibrary, selection: $photoItem, matching: .images)
+        .sheet(isPresented: $showGearViewSheet) {
+            GearView(startWithAddGear: true)
+        }
+        .sheet(isPresented: $showAddJournalSheet) {
+            JournalView(startWithAddEntry: true)
+                .environmentObject(journalStore)
+        }
+        .sheet(isPresented: $showIconSelection) {
+            IconSelectionSheet(selectedIconName: $selectedIconName, storedImageData: $storedImageData, showPhotoLibrary: $showPhotoLibrary)
+        }
     }
     
     @State private var photoItem: PhotosPickerItem? = nil
@@ -69,182 +83,180 @@ struct TodayView: View {
     @State private var favoriteGun: String = ""
     
     private var mainContent: some View {
-        NavigationView {
-            ZStack {
-                Image("BackGround")
-                    .resizable()
-                    .scaledToFill()
-                    .ignoresSafeArea()
-                Color.black.opacity(0.6)
-                    .ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 24) {
-                        VStack {
-                            userIconButton
-                            userNameView
-                            playStatsSection
-                        }
-                        .frame(maxWidth: 300)
-                        .padding(24)
-                        .background(
-                            RoundedRectangle(cornerRadius: 32)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 32)
-                                .stroke(Color.white.opacity(0.18), lineWidth: 1.0)
-                        )
-                        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
-                        .padding(.horizontal, 12)
-                        
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("最近のプレイ履歴")
-                                .font(.headline)
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer().frame(height: 50)
+                VStack(spacing: 12) {
+                    HStack(spacing: 8) {
+                        userIconButton
+                        userNameView
+                    }
+                    playStatsSection
+                }
+                .frame(maxWidth: 300)
+                .padding(.top, 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 32)
+                        .fill(Color.white.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 32)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1.0)
+                )
+                .shadow(color:
+                        .black.opacity(0.15), radius: 8, y: 4)
+                .padding(.horizontal, 12)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("最近のプレイ履歴")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let entry = latestJournalEntry {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(entry.date, style: .date)
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.85))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text("フィールド: \(entry.fieldName)")
+                                .font(.body)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            if let entry = latestJournalEntry {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(entry.date, style: .date)
-                                        .font(.subheadline)
-                                        .foregroundColor(.white.opacity(0.85))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    Text("フィールド: \(entry.fieldName)")
-                                        .font(.body)
-                                        .foregroundColor(.white)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    if !entry.gameContent.isEmpty {
-                                        Text("内容: \(entry.gameContent)")
-                                            .font(.caption)
-                                            .foregroundColor(.white.opacity(0.9))
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    if !entry.weapons.isEmpty {
-                                        Text("武器: \(entry.weapons.joined(separator: ", "))")
-                                            .font(.caption2)
-                                            .foregroundColor(.white.opacity(0.8))
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }
-                            } else {
-                                Text("まだ履歴がありません")
-                                    .foregroundColor(.gray)
-                                    .font(.subheadline)
+                            if !entry.gameContent.isEmpty {
+                                Text("内容: \(entry.gameContent)")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            if !entry.weapons.isEmpty {
+                                Text("武器: \(entry.weapons.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.8))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
-                        .frame(width: 300, alignment: .leading)
-                        .padding(18)
-                        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
-                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.15), lineWidth: 1.0))
-                        .shadow(color: .black.opacity(0.10), radius: 4, y: 2)
-                        .padding(.horizontal, 12)
+                    } else {
+                        Text("まだ履歴がありません")
+                            .foregroundColor(.gray)
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(width: 300, alignment: .leading)
+                .padding(18)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.15), lineWidth: 1.0))
+                .shadow(color: .black.opacity(0.10), radius: 4, y: 2)
+                .padding(.horizontal, 12)
 
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("アチーブメントバッチ")
-                                .font(.headline)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("アチーブメントバッチ")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    HStack(spacing: 8) {
+                        ForEach(achievementBadges, id: \.icon) { badge in
+                            VStack(spacing: 4) {
+                                Image(systemName: badge.icon)
+                                    .resizable()
+                                    .frame(width: 32, height: 32)
+                                    .foregroundColor(badge.color)
+                                    .opacity(badge.reached ? 1.0 : 0.4)
+                                Text(badge.title)
+                                    .font(.caption2)
+                                    .foregroundColor(.white)
+                            }
+                            .frame(width: 56)
+                        }
+                    }
+                }
+                .frame(width: 300)
+                .multilineTextAlignment(.leading)
+                .padding(18)
+                .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.13), lineWidth: 1))
+                .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                .padding(.horizontal, 12)
+
+                HStack(spacing: 16) {
+                    Button(action: { showGearViewSheet = true }) {
+                        ZStack {
+                            Image("camo1")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 140, height: 60)
+                                .clipped()
+                                .cornerRadius(16)
+                            Text("装備")
                                 .foregroundColor(.white)
-                            HStack(spacing: 8) {
-                                ForEach(achievementBadges, id: \.icon) { badge in
-                                    VStack(spacing: 4) {
-                                        Image(systemName: badge.icon)
-                                            .resizable()
-                                            .frame(width: 32, height: 32)
-                                            .foregroundColor(badge.color)
-                                            .opacity(badge.reached ? 1.0 : 0.4)
-                                        Text(badge.title)
-                                            .font(.caption2)
-                                            .foregroundColor(.white)
-                                    }
-                                    .frame(width: 56)
-                                }
-                            }
+                                .font(.headline)
+                                .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 0)
                         }
-                        .frame(width: 300)
-                        .multilineTextAlignment(.leading)
-                        .padding(18)
-                        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
-                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.13), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
-                        .padding(.horizontal, 12)
-
-                        HStack(spacing: 16) {
-                            Button(action: { showGearViewSheet = true }) {
-                                ZStack {
-                                    Image("camo1")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 140, height: 60)
-                                        .clipped()
-                                        .cornerRadius(16)
-                                    Text("装備")
-                                        .foregroundColor(.white)
-                                        .font(.headline)
-                                        .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 0)
-                                }
-                            }
-                            .frame(width: 140, height: 60)
-                            .buttonStyle(.plain)
-
-                            Button(action: { showAddJournalSheet = true }) {
-                                ZStack {
-                                    Image("camo2")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 140, height: 60)
-                                        .clipped()
-                                        .cornerRadius(16)
-                                    Text("記録")
-                                        .foregroundColor(.white)
-                                        .font(.headline)
-                                        .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 0)
-                                }
-                            }
-                            .frame(width: 140 , height: 60)
-                            .buttonStyle(.plain)
-                        }
-                        .frame(width: 300)
-                        .padding(.horizontal, 12)
-
-                        Spacer(minLength: 12)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 24)
-                }
-                .scrollIndicators(.hidden)
-            }
-            .navigationTitle("アカウント")
-            .onAppear {
-                var count = 0
-                if let decoded = try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData) {
-                    count = decoded.count
-                }
-                self.playCount = count
-                print("[DEBUG] UserDefaults(AppStorage)から取得したプレイ数: \(count)")
-            }
-            .onChange(of: savedJournalEntriesData) { _ in
-                if let decoded = try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData) {
-                    self.playCount = decoded.count
-                } else {
-                    self.playCount = 0
-                }
-            }
-            .onChange(of: photoItem) { newPhotoItem in
-                guard let photoItem = newPhotoItem else { return }
-                Task {
-                    if let data = try? await photoItem.loadTransferable(type: Data.self) {
-                        selectedImageData = IdentifiableData(data: data)
-                    }
-                }
-            }
-            .sheet(item: $selectedImageData) { wrapper in
-                if let uiImage = UIImage(data: wrapper.data) {
-                    if let data = uiImage.jpegData(compressionQuality: 1.0) {
-                        CircularImageCropperView(imageData: data) { croppedImage in
-                            selectedImage = croppedImage
-                            storedImageData = croppedImage.jpegData(compressionQuality: 0.9)
-                            selectedIconName = "user"
-                            selectedImageData = nil
+                    .frame(width: 140, height: 60)
+                    .buttonStyle(.plain)
+
+                    Button(action: { showAddJournalSheet = true }) {
+                        ZStack {
+                            Image("camo2")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 140, height: 60)
+                                .clipped()
+                                .cornerRadius(16)
+                            Text("記録")
+                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
+                                .colorMultiply(.white)
+                                .font(.headline)
+                                .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 0)
                         }
+                    }
+                    .frame(width: 140 , height: 60)
+                    .buttonStyle(.plain)
+                }
+                .frame(width: 300)
+                .padding(.horizontal, 12)
+
+                Spacer(minLength: 12)
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 24)
+        }
+        .background(Color.clear)
+        .scrollIndicators(.hidden)
+        .navigationTitle("アカウント")
+        .toolbarColorScheme(.dark)
+        .onAppear {
+            var count = 0
+            if let decoded = try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData) {
+                count = decoded.count
+            }
+            self.playCount = count
+            print("[DEBUG] UserDefaults(AppStorage)から取得したプレイ数: \(count)")
+        }
+        .onChange(of: savedJournalEntriesData) { _ in
+            if let decoded = try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData) {
+                self.playCount = decoded.count
+            } else {
+                self.playCount = 0
+            }
+        }
+        .onChange(of: photoItem) { newPhotoItem in
+            guard let photoItem = newPhotoItem else { return }
+            Task {
+                if let data = try? await photoItem.loadTransferable(type: Data.self) {
+                    selectedImageData = IdentifiableData(data: data)
+                }
+            }
+        }
+        .sheet(item: $selectedImageData) { wrapper in
+            if let uiImage = UIImage(data: wrapper.data) {
+                if let data = uiImage.jpegData(compressionQuality: 1.0) {
+                    CircularImageCropperView(imageData: data) { croppedImage in
+                        selectedImage = croppedImage
+                        storedImageData = croppedImage.jpegData(compressionQuality: 0.9)
+                        selectedIconName = "user"
+                        selectedImageData = nil
                     }
                 }
             }
@@ -253,50 +265,49 @@ struct TodayView: View {
     
     private var userNameView: some View {
         HStack {
-            VStack(spacing: 8) {
-                if isEditingName {
-                    TextField("ユーザー名", text: $userName, onCommit: {
-                        isEditingName = false
-                        isNameFieldFocused = false
-                    })
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .focused($isNameFieldFocused)
-                    .onSubmit {
-                        isEditingName = false
-                        isNameFieldFocused = false
-                    }
-                    .submitLabel(.done)
+            if isEditingName {
+                TextField("ユーザー名", text: $userName, onCommit: {
+                    isEditingName = false
+                    isNameFieldFocused = false
+                })
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .focused($isNameFieldFocused)
+                .onSubmit {
+                    isEditingName = false
+                    isNameFieldFocused = false
+                }
+                .submitLabel(.done)
+            } else {
+                if userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("...")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .onTapGesture {
+                            isEditingName = true
+                            isNameFieldFocused = true
+                        }
                 } else {
-                    if userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("...")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                            .onTapGesture {
-                                isEditingName = true
-                                isNameFieldFocused = true
-                            }
-                    } else {
+                    HStack(spacing: 4) {
                         Text(userName)
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                            .onTapGesture {
-                                isEditingName = true
-                                isNameFieldFocused = true
-                            }
+                        Image(systemName: "pencil")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .onTapGesture {
+                        isEditingName = true
+                        isNameFieldFocused = true
                     }
                 }
             }
-            .padding(.horizontal, 10)
         }
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
     }
 
     private var userIconButton: some View {
@@ -349,6 +360,58 @@ struct TodayView: View {
         let id: String
         let name: String
         let imageURL: String
+    }
+}
+
+struct IconSelectionSheet: View {
+    @Binding var selectedIconName: String
+    @Binding var storedImageData: Data?
+    @Binding var showPhotoLibrary: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    let iconNames = (1...9).map { "d_icon_\($0)" }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 18) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 18), count: 3), spacing: 22) {
+                    ForEach(iconNames, id: \.self) { name in
+                        Button(action: {
+                            selectedIconName = name
+                            storedImageData = nil
+                            dismiss()
+                        }) {
+                            Image(name)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 68, height: 68)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(selectedIconName == name ? Color.blue : .clear, lineWidth: 3))
+                        }
+                    }
+                }
+                .padding(.vertical, 6)
+                Divider()
+                Button(action: {
+                    showPhotoLibrary = true
+                    dismiss()
+                }) {
+                    Label("写真から選ぶ", systemImage: "photo.on.rectangle")
+                        .font(.title3.bold())
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue.opacity(0.13))
+                        .cornerRadius(10)
+                }
+            }
+            .padding()
+            .navigationTitle("アイコン選択")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+        }
     }
 }
 
@@ -452,8 +515,4 @@ struct CircularImageCropperView: UIViewControllerRepresentable {
         }
     }
 }
-
-//#Preview {
-//    TodayView()
-//}
 

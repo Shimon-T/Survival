@@ -40,13 +40,14 @@ struct JournalView: View {
                                 Spacer(minLength: 120)
                                 Text("記録がまだありません")
                                     .font(.title3)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(.white)
                                 Spacer(minLength: 120)
                             }
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         }
+                        .foregroundColor(.white)
                     }
                     .listStyle(.plain)
                 } else {
@@ -55,16 +56,21 @@ struct JournalView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(entry.fieldName)
                                     .font(.headline)
+                                    .foregroundColor(.white)
                                 Text(entry.date, style: .date)
                                     .font(.subheadline)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(.white)
                                 if expandedEntryID == entry.id {
                                     Divider()
                                     if !entry.gameContent.isEmpty {
-                                        Text("ゲーム内容: \(entry.gameContent)").font(.subheadline)
+                                        Text("ゲーム内容: \(entry.gameContent)")
+                                            .font(.subheadline)
+                                            .foregroundColor(.white)
                                     }
                                     if !entry.weapons.isEmpty {
-                                        Text("武器: \(entry.weapons.joined(separator: "、"))").font(.subheadline)
+                                        Text("武器: \(entry.weapons.joined(separator: "、"))")
+                                            .font(.subheadline)
+                                            .foregroundColor(.white)
                                     }
                                 }
                             }
@@ -98,13 +104,25 @@ struct JournalView: View {
                         .ignoresSafeArea()
                 }
             )
-            .navigationTitle("記録")
+//            .navigationTitle("記録")
+//            .toolbarColorScheme(.dark)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("記録")
+                        .foregroundColor(.white)
+                        .font(.title)
+                }
+            }
+            .toolbarBackground(Color.clear, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { prepareNewEntry(); isShowingAddEntry = true }) {
                         HStack {
                             Image(systemName: "square.and.pencil")
                             Text("記録")
+                                .foregroundColor(.white)
                         }
                     }
                 }
@@ -144,6 +162,7 @@ struct JournalView: View {
                     onDelete: nil
                 )
                 .navigationTitle("記録を追加")
+                .foregroundColor(.white)
             }
         }
         // Edit Entry Sheet
@@ -183,6 +202,7 @@ struct JournalView: View {
                     }
                 )
                 .navigationTitle("記録を編集")
+                .foregroundColor(.white)
             }
         }
     }
@@ -278,27 +298,30 @@ struct JournalView: View {
         onDelete: (() -> Void)? = nil
     ) -> some View {
         Form {
-            Section(header: Text("フィールド名")) {
+            Section(header: Text("フィールド名").foregroundColor(.white)) {
                 TextField("例: フィールドABC", text: $fieldName)
                     .autocapitalization(.none)
+                    .foregroundColor(.white)
             }
-            Section(header: Text("日付")) {
+            Section(header: Text("日付").foregroundColor(.white)) {
                 DatePicker("日付", selection: $date, displayedComponents: .date)
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundColor(.white)
             }
-            Section(header: Text("ゲーム内容")) {
+            Section(header: Text("ゲーム内容").foregroundColor(.white)) {
                 Picker("ゲーム内容を選択", selection: $selectedGameMode) {
-                    ForEach(gameModes, id: \.self) { Text($0) }
+                    ForEach(gameModes, id: \.self) { Text($0).foregroundColor(.white) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if selectedGameMode == "カスタム(自分で入力)" {
                     TextField("カスタム内容を入力", text: $customGameContent)
                         .autocapitalization(.none)
+                        .foregroundColor(.white)
                 }
             }
-            Section(header: Text("使用武器")) {
+            Section(header: Text("使用武器").foregroundColor(.white)) {
                 // Owned guns quick-pick (same as before, but add to multi-select)
                 if !ownedGuns.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -322,7 +345,7 @@ struct JournalView: View {
                                                     .cornerRadius(5)
                                             }
                                         }
-                                        Text(gun.name).font(.caption)
+                                        Text(gun.name).font(.caption).foregroundColor(.white)
                                     }
                                     .padding(6)
                                     .background(Color.gray.opacity(0.18))
@@ -334,6 +357,7 @@ struct JournalView: View {
                     }
                 } else {
                     Text("もしも装備品が表示されない場合は一度装備タブを読み込んでください")
+                        .foregroundColor(.white)
                 }
 
                 // Selected weapons chips with tap-to-remove
@@ -347,6 +371,7 @@ struct JournalView: View {
                                         .padding(6)
                                         .background(Color.gray.opacity(0.25))
                                         .cornerRadius(8)
+                                        .foregroundColor(.white)
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel(Text("選択武器 \(name)"))
@@ -361,6 +386,7 @@ struct JournalView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("名前で検索 (例: M4, グロック)", text: $weaponQuery)
                         .autocapitalization(.none)
+                        .foregroundColor(.white)
                         .onSubmit {
                             let trimmed = weaponQuery.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
@@ -391,16 +417,17 @@ struct JournalView: View {
                     if !searchHint.isEmpty {
                         Text(searchHint)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.7))
                     }
 
                     if isSearchingWeapons {
                         ProgressView("検索中…")
+                            .foregroundColor(.white)
                     }
                     if !isSearchingWeapons && !searchResults.isEmpty {
                         Text("候補数: \(searchResults.count)")
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.7))
                     }
 
                     // Error message
@@ -414,7 +441,7 @@ struct JournalView: View {
                     if !isSearchingWeapons && !weaponQuery.isEmpty && searchResults.isEmpty && lastSearchError == nil {
                         Text("候補は見つかりませんでした（\(lastSearchedKeyword)）")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.white.opacity(0.7))
                         Button(action: {
                             let trimmed = weaponQuery.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
@@ -424,6 +451,7 @@ struct JournalView: View {
                             searchHint = ""
                         }) {
                             Text("この名前で追加する")
+                                .foregroundColor(.white)
                         }
                     }
 
@@ -446,6 +474,7 @@ struct JournalView: View {
                                         }
                                         Text(gun.name)
                                             .font(.subheadline)
+                                            .foregroundColor(.white)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                 }
@@ -461,18 +490,20 @@ struct JournalView: View {
                 Section {
                     Button("削除", role: .destructive, action: onDelete)
                         .frame(maxWidth: .infinity, alignment: .center)
+                        .foregroundColor(.white)
                 }
             }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("キャンセル", action: onCancel)
+                    .foregroundColor(.white)
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("保存", action: onSave)
                     .disabled(saveDisabled)
+                    .foregroundColor(.white)
             }
         }
     }
 }
-

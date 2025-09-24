@@ -225,6 +225,7 @@ struct GearView: View {
                 }
             )
             .navigationTitle("装備")
+            .toolbarColorScheme(.dark)
         }
         .onAppear {
             if let decoded = try? JSONDecoder().decode([Gun].self, from: savedGunsData), !decoded.isEmpty {
@@ -671,7 +672,7 @@ struct WeaponSearchView: View {
                                 presentationMode.wrappedValue.dismiss()
                             },
                             onProgress: { progress in
-                                cardOffsetY = -progress * 40
+                                cardOffsetY = -progress * (UIScreen.main.bounds.height * 0.25)
                             }
                         )
                         .padding(.bottom, 30)
@@ -702,23 +703,26 @@ struct WeaponSearchView: View {
 
         var body: some View {
             let maxOffset: CGFloat = railWidth - circleSize - padding*2
-            let normalizedOffset = offset / maxOffset
-            let progress: CGFloat = min(max(normalizedOffset, 0), 1)
-            let leftOffset = -(offset - (railWidth/2) + (circleSize/2) + padding)
-            let rightOffset = offset - (railWidth/2) + (circleSize/2) + padding
+            let normalized: CGFloat = max(0, min(offset / maxOffset, 1))
+            let knobOffsetLeft: CGFloat  = -(offset - (railWidth/2) + (circleSize/2) + padding)
+            let knobOffsetRight: CGFloat =  (offset - (railWidth/2) + (circleSize/2) + padding)
+            let knobOffset: CGFloat = isAlreadyAdded ? knobOffsetLeft : knobOffsetRight
+            let textOffset: CGFloat = isAlreadyAdded ? -30 : 30
 
-            // Call progress callback
-            onProgress?(progress)
+            // Report progress upward
+            onProgress?(normalized)
 
-            ZStack {
+            return ZStack {
                 Capsule()
                     .fill(Color.primary.opacity(0.1))
                     .frame(width: railWidth, height: railHeight)
+
                 Text(isAlreadyAdded ? "スワイプして削除" : "スワイプして追加")
                     .foregroundColor(.primary)
                     .font(.headline)
-                    .opacity(1.0 - progress)
-                    .offset(x: isAlreadyAdded ? -30 : 30)
+                    .opacity(1.0 - normalized)
+                    .offset(x: textOffset)
+
                 Circle()
                     .fill(isAlreadyAdded ? Color.red : Color.accentColor)
                     .frame(width: circleSize, height: circleSize)
@@ -727,24 +731,22 @@ struct WeaponSearchView: View {
                             .foregroundColor(.white)
                             .font(.system(size: 28, weight: .bold))
                     )
-                    .offset(x: isAlreadyAdded ? leftOffset : rightOffset)
+                    .offset(x: knobOffset)
                     .gesture(
                         DragGesture()
                             .onChanged { value in
                                 let newOffset = max(0, min(abs(value.translation.width), maxOffset))
                                 offset = newOffset
                             }
-                            .onEnded { value in
+                            .onEnded { _ in
                                 if offset > maxOffset - 8 {
                                     if isAlreadyAdded {
                                         onRemove?()
                                     } else {
                                         onAdd?()
                                     }
-                                    withAnimation { offset = 0 }
-                                } else {
-                                    withAnimation { offset = 0 }
                                 }
+                                withAnimation { offset = 0 }
                             }
                     )
             }
