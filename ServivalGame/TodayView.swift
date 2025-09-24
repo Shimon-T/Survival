@@ -5,9 +5,10 @@
 //  Created by 田中志門 on 6/1/25.
 //
 
-
 import SwiftUI
 import PhotosUI
+import UIKit
+import TOCropViewController
 
 // Wrapper to make Data Identifiable for .sheet(item:)
 struct IdentifiableData: Identifiable {
@@ -16,260 +17,349 @@ struct IdentifiableData: Identifiable {
 }
 
 struct TodayView: View {
-    @State private var playCount = 0
+    @EnvironmentObject var journalStore: JournalStore
+    
     @State private var selectedImage: UIImage?
     @State private var selectedImageData: IdentifiableData?
     @State private var showPhotoPicker = false
-    @State private var showGunEntrySheet = false
-    @State private var favoriteGun: String = ""
-    @State private var battleLogs: [String] = []
-    @State private var showAllBattles: Bool = false
-    @State private var photoItem: PhotosPickerItem?
-    @State private var suggestions: [Gun] = []
+    @State private var showGearViewSheet = false
+    @State private var showAddJournalSheet = false
     @State private var showIconSelection = false
     @AppStorage("selectedIconName") private var selectedIconName: String = "d_icon_1"
     @AppStorage("userSelectedImageData") private var storedImageData: Data?
+    @AppStorage("journalEntries") private var savedJournalEntriesData: Data = Data()
+    @AppStorage("userName") private var userName: String = "ユーザー名"
+    
+    @State private var isEditingName = false
+    @FocusState private var isNameFieldFocused: Bool
+    @State private var playCount: Int = 0 // Added playCount state
 
-var body: some View {
-    ZStack {
-        LinearGradient(
-            gradient: Gradient(stops: [
-                .init(color: Color.white, location: 0.0),
-                .init(color: Color(white: 0.9), location: 0.5),
-                .init(color: Color(white: 0.85), location: 1.0)
-            ]),
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+    let cardMaxWidth = UIScreen.main.bounds.width * 0.8
 
-        mainContent
+    private var latestJournalEntry: JournalEntry? {
+        guard let decoded = try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData), !decoded.isEmpty else { return nil }
+        return decoded.sorted { $0.date > $1.date }.first
     }
-    .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
-}
-
-private var mainContent: some View {
-    NavigationView {
-        VStack(spacing: 24) {
-            Spacer()
-
-            userIconButton
-
-            playStatsSection
-
-            favoriteGunSection
-
-            ForEach(showAllBattles ? battleLogs : Array(battleLogs.prefix(3)), id: \.self) { log in
-                Text("・\(log)")
-                    .font(.body)
-            }
-
-            if battleLogs.count >= 4 && !showAllBattles {
-                Button("もっと") {
-                    showAllBattles = true
-                }
-                .padding(.top, 8)
-            }
-
-            Spacer()
+    
+    private var achievementBadges: [(icon: String, title: String, reached: Bool, color: Color)] {
+        let milestones = [(5, "star"), (10, "flame"), (30, "crown"), (50, "trophy")]
+        let colors: [Color] = [.yellow, .orange, .pink, .red]
+        return milestones.enumerated().map { (idx, pair) in
+            let (count, icon) = pair
+            let reached = playCount >= count
+            let color = reached ? colors[idx] : .gray
+            return (icon: icon, title: "\(count)回", reached: reached, color: color)
         }
-        .padding()
-        .navigationTitle("アカウント")
-        .onChange(of: photoItem) {
-            guard let photoItem else { return }
-            Task {
-                if let data = try? await photoItem.loadTransferable(type: Data.self) {
-                    selectedImageData = IdentifiableData(data: data)
+    }
+
+    var body: some View {
+        mainContent
+            .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
+            .sheet(isPresented: $showGearViewSheet) {
+                GearView(startWithAddGear: true)
+            }
+            .sheet(isPresented: $showAddJournalSheet) {
+                JournalView(startWithAddEntry: true)
+                    .environmentObject(journalStore)
+            }
+    }
+    
+    @State private var photoItem: PhotosPickerItem? = nil
+    @State private var suggestions: [Gun] = []
+    @State private var favoriteGun: String = ""
+    
+    private var mainContent: some View {
+        NavigationView {
+            ZStack {
+                Image("BackGround")
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 24) {
+                        VStack {
+                            userIconButton
+                            userNameView
+                            playStatsSection
+                        }
+                        .frame(maxWidth: 300)
+                        .padding(24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 32)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 32)
+                                .stroke(Color.white.opacity(0.18), lineWidth: 1.0)
+                        )
+                        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                        .padding(.horizontal, 12)
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("最近のプレイ履歴")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if let entry = latestJournalEntry {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(entry.date, style: .date)
+                                        .font(.subheadline)
+                                        .foregroundColor(.white.opacity(0.85))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Text("フィールド: \(entry.fieldName)")
+                                        .font(.body)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    if !entry.gameContent.isEmpty {
+                                        Text("内容: \(entry.gameContent)")
+                                            .font(.caption)
+                                            .foregroundColor(.white.opacity(0.9))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    if !entry.weapons.isEmpty {
+                                        Text("武器: \(entry.weapons.joined(separator: ", "))")
+                                            .font(.caption2)
+                                            .foregroundColor(.white.opacity(0.8))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                            } else {
+                                Text("まだ履歴がありません")
+                                    .foregroundColor(.gray)
+                                    .font(.subheadline)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .frame(width: 300, alignment: .leading)
+                        .padding(18)
+                        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
+                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.15), lineWidth: 1.0))
+                        .shadow(color: .black.opacity(0.10), radius: 4, y: 2)
+                        .padding(.horizontal, 12)
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("アチーブメントバッチ")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            HStack(spacing: 8) {
+                                ForEach(achievementBadges, id: \.icon) { badge in
+                                    VStack(spacing: 4) {
+                                        Image(systemName: badge.icon)
+                                            .resizable()
+                                            .frame(width: 32, height: 32)
+                                            .foregroundColor(badge.color)
+                                            .opacity(badge.reached ? 1.0 : 0.4)
+                                        Text(badge.title)
+                                            .font(.caption2)
+                                            .foregroundColor(.white)
+                                    }
+                                    .frame(width: 56)
+                                }
+                            }
+                        }
+                        .frame(width: 300)
+                        .multilineTextAlignment(.leading)
+                        .padding(18)
+                        .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
+                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.13), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                        .padding(.horizontal, 12)
+
+                        HStack(spacing: 16) {
+                            Button(action: { showGearViewSheet = true }) {
+                                ZStack {
+                                    Image("camo1")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 140, height: 60)
+                                        .clipped()
+                                        .cornerRadius(16)
+                                    Text("装備")
+                                        .foregroundColor(.white)
+                                        .font(.headline)
+                                        .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 0)
+                                }
+                            }
+                            .frame(width: 140, height: 60)
+                            .buttonStyle(.plain)
+
+                            Button(action: { showAddJournalSheet = true }) {
+                                ZStack {
+                                    Image("camo2")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 140, height: 60)
+                                        .clipped()
+                                        .cornerRadius(16)
+                                    Text("記録")
+                                        .foregroundColor(.white)
+                                        .font(.headline)
+                                        .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 0)
+                                }
+                            }
+                            .frame(width: 140 , height: 60)
+                            .buttonStyle(.plain)
+                        }
+                        .frame(width: 300)
+                        .padding(.horizontal, 12)
+
+                        Spacer(minLength: 12)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 24)
+                }
+                .scrollIndicators(.hidden)
+            }
+            .navigationTitle("アカウント")
+            .onAppear {
+                var count = 0
+                if let decoded = try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData) {
+                    count = decoded.count
+                }
+                self.playCount = count
+                print("[DEBUG] UserDefaults(AppStorage)から取得したプレイ数: \(count)")
+            }
+            .onChange(of: savedJournalEntriesData) { _ in
+                if let decoded = try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData) {
+                    self.playCount = decoded.count
+                } else {
+                    self.playCount = 0
                 }
             }
-        }
-        .sheet(item: $selectedImageData) { wrapper in
-            if let uiImage = UIImage(data: wrapper.data) {
-                if let data = uiImage.jpegData(compressionQuality: 1.0) {
-                    CircularImageCropperView(imageData: data) { croppedImage in
-                        selectedImage = croppedImage
-                        storedImageData = croppedImage.jpegData(compressionQuality: 0.9)
-                        selectedIconName = "user"
-                        selectedImageData = nil
+            .onChange(of: photoItem) { newPhotoItem in
+                guard let photoItem = newPhotoItem else { return }
+                Task {
+                    if let data = try? await photoItem.loadTransferable(type: Data.self) {
+                        selectedImageData = IdentifiableData(data: data)
+                    }
+                }
+            }
+            .sheet(item: $selectedImageData) { wrapper in
+                if let uiImage = UIImage(data: wrapper.data) {
+                    if let data = uiImage.jpegData(compressionQuality: 1.0) {
+                        CircularImageCropperView(imageData: data) { croppedImage in
+                            selectedImage = croppedImage
+                            storedImageData = croppedImage.jpegData(compressionQuality: 0.9)
+                            selectedIconName = "user"
+                            selectedImageData = nil
+                        }
                     }
                 }
             }
         }
-        .sheet(isPresented: $showGunEntrySheet) {
-            GunEntrySheet(favoriteGun: $favoriteGun,
-                          suggestions: $suggestions,
-                          searchGuns: searchGuns)
-        }
     }
-    .sheet(isPresented: $showIconSelection) {
-        iconSelectionSheet
-    }
-}
-
-private var userIconButton: some View {
-    Button {
-        showIconSelection = true
-    } label: {
-        if let data = storedImageData, let restoredImage = UIImage(data: data) {
-            Image(uiImage: restoredImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 100, height: 100)
-                .clipShape(Circle())
-                .clipped()
-        } else {
-            Image(selectedIconName)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 97, height: 97)
-                .clipShape(Circle())
-        }
-    }
-}
-
-private var playStatsSection: some View {
-    VStack(spacing: 8) {
-        Text("サバゲープレイ数: \(playCount)回")
-            .font(.headline)
-        Text("ランキング: 全国102位")
-            .font(.subheadline)
-            .foregroundColor(.gray)
-        Button("プレイ数を追加") {
-            playCount += 1
-        }
-    }
-}
-
-private var favoriteGunSection: some View {
-    VStack(alignment: .center, spacing: 12) {
-        Text("お気に入りの銃")
-            .font(.title2)
-            .fontWeight(.semibold)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-        VStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 200, height: 80)
-                .overlay(
-                    favoriteGunImageOnlyView()
-                )
-                .onTapGesture {
-                    showGunEntrySheet = true
+    
+    private var userNameView: some View {
+        HStack {
+            VStack(spacing: 8) {
+                if isEditingName {
+                    TextField("ユーザー名", text: $userName, onCommit: {
+                        isEditingName = false
+                        isNameFieldFocused = false
+                    })
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .focused($isNameFieldFocused)
+                    .onSubmit {
+                        isEditingName = false
+                        isNameFieldFocused = false
+                    }
+                    .submitLabel(.done)
+                } else {
+                    if userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("...")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .onTapGesture {
+                                isEditingName = true
+                                isNameFieldFocused = true
+                            }
+                    } else {
+                        Text(userName)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .onTapGesture {
+                                isEditingName = true
+                                isNameFieldFocused = true
+                            }
+                    }
                 }
+            }
+            .padding(.horizontal, 10)
+        }
+        .frame(maxWidth: .infinity)
+    }
 
-            if let selected = suggestions.first(where: { $0.name == favoriteGun }) {
-                Text(selected.name)
-                    .font(.caption)
+    private var userIconButton: some View {
+        Button {
+            showIconSelection = true
+        } label: {
+            if let data = storedImageData, let restoredImage = UIImage(data: data) {
+                Image(uiImage: restoredImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 100, height: 100)
+                    .clipShape(Circle())
+                    .overlay(Circle().fill(Color.black.opacity(0.36)))
+                    .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 2))
             } else {
-                Text("未登録")
-                    .font(.caption)
+                Image(selectedIconName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 97, height: 97)
+                    .clipShape(Circle())
+                    .overlay(Circle().fill(Color.black.opacity(0.36)))
+                    .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 2))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .center)
-
-        Text("直近のバトル記録")
-            .font(.title3)
-            .padding(.top, 16)
     }
-    .padding(.horizontal)
-}
-
-private var iconSelectionSheet: some View {
-    VStack(spacing: 20) {
-        Text("アイコンを選択")
-            .font(.headline)
-
-        let defaultIcons = (1...9).map { "d_icon_\($0)" }
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 3), spacing: 16) {
-            ForEach(defaultIcons, id: \.self) { iconName in
-                ZStack {
-                    Circle()
-                        .fill(Color.clear)
-                        .frame(width: 80, height: 80)
-                    Image(iconName)
-                        .resizable(capInsets: EdgeInsets(), resizingMode: .stretch)
-                        .scaledToFill()
-                        .frame(width: 88, height: 88) // 1.1x of 80
-                        .clipShape(Circle())
-                }
-                .onTapGesture {
-                    selectedImage = nil
-                    storedImageData = nil
-                    selectedIconName = iconName
-                    showIconSelection = false
-                }
-            }
-        }
-
-        Button("写真から選ぶ") {
-            showIconSelection = false
-            showPhotoPicker = true
-        }
-        .padding()
-    }
-    .padding()
-}
     
+    private var playStatsSection: some View {
+        VStack(spacing: 8) {
+            Text("プレイ回数: \(playCount)回")
+                .font(.title)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+        }
+    }
+
     @ViewBuilder
-    private func favoriteGunImageOnlyView() -> some View {
-        if let selected = suggestions.first(where: { $0.name == favoriteGun }) {
-            AsyncImage(url: URL(string: selected.imageURL)) { image in
-                image
-                    .resizable(capInsets: EdgeInsets(), resizingMode: .stretch)
-                    .scaledToFit()
-                    .frame(width: 200)
-                    .clipped()
-                    .cornerRadius(10)
-            } placeholder: {
-                Color.gray
-                    .frame(width: 200, height: 80)
-                    .cornerRadius(10)
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func favoriteGunView() -> some View {
-        if let selected = suggestions.first(where: { $0.name == favoriteGun }) {
-            VStack {
-                AsyncImage(url: URL(string: selected.imageURL)) { image in
-                    image.resizable().scaledToFit().frame(height: 60)
-                } placeholder: {
-                    Color.gray.frame(height: 60)
-                }
-                Text(selected.name)
-                    .font(.caption)
-            }
-        } else {
-            Text("未登録")
-                .font(.headline)
-        }
-    }
-    
     private func searchGuns(keyword: String) {
-        guard let encoded = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://my-api-4aul.onrender.com/guns/search?q=\(encoded)") else {
+        guard let url = Bundle.main.url(forResource: "guns", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([Gun].self, from: data) else {
+            self.suggestions = []
             return
         }
 
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            if let data = data {
-                if let decoded = try? JSONDecoder().decode([Gun].self, from: data) {
-                    DispatchQueue.main.async {
-                        self.suggestions = decoded
-                    }
-                }
-            }
-        }.resume()
+        let filtered = decoded.filter { $0.name.localizedCaseInsensitiveContains(keyword) }
+        self.suggestions = filtered
     }
-    
+
     struct Gun: Identifiable, Codable {
         let id: String
         let name: String
         let imageURL: String
     }
 }
+
+// Suggestion for JournalStore removal of UserDefaults key when all records deleted
+// This is NOT part of TodayView.swift but to fulfill instruction:
+//
+// In JournalStore.swift (not shown here), inside the method that deletes entries, add:
+//
+// if entries.isEmpty {
+//     UserDefaults.standard.removeObject(forKey: "JournalEntries")
+// }
 
 struct GunEntrySheet: View {
     @Binding var favoriteGun: String
@@ -324,9 +414,6 @@ struct GunEntrySheet: View {
     }
 }
 
-import UIKit
-import TOCropViewController
-
 struct CircularImageCropperView: UIViewControllerRepresentable {
     let imageData: Data
     var onCropped: (UIImage) -> Void
@@ -365,3 +452,8 @@ struct CircularImageCropperView: UIViewControllerRepresentable {
         }
     }
 }
+
+//#Preview {
+//    TodayView()
+//}
+

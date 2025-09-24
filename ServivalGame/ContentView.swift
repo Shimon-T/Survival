@@ -13,6 +13,7 @@ struct ContentView: View {
     init(selectedTab: Int = 0) {
         _selectedTab = State(initialValue: selectedTab)
     }
+    
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -28,15 +29,15 @@ struct ContentView: View {
                 }
                 .tag(1)
             
-            FieldSearchView()
+            JournalView()
                 .tabItem {
-                    Label("フィールド", systemImage: "map.fill")
+                    Label("記録", systemImage: "book.fill")
                 }
                 .tag(2)
             
-            SettingsView()
+            FieldSearchView()
                 .tabItem {
-                    Label("設定", systemImage: "gearshape.fill")
+                    Label("フィールド", systemImage: "map.fill")
                 }
                 .tag(3)
         }

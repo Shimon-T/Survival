@@ -6,6 +6,115 @@
 //
 
 import SwiftUI
+import Vision
+import CoreImage
+import CoreImage.CIFilterBuiltins
+
+struct ForegroundCutoutImage: View {
+    let imageUrl: URL
+    @State private var processedImage: UIImage?
+    @State private var isProcessing = false
+    private let outlineRadius: CGFloat = 1 // 枠線の太さ（ピクセル相当）
+
+    var body: some View {
+        Group {
+            if let processedImage {
+                Image(uiImage: processedImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    // Removed overlay of RoundedRectangle
+            } else {
+                AsyncImage(url: imageUrl) { image in
+                    image.resizable().aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    ProgressView()
+                }
+                .onAppear {
+                    if !isProcessing { processImage() }
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 50))
+    }
+
+    private func processImage() {
+        isProcessing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let data = try? Data(contentsOf: imageUrl), let uiImage = UIImage(data: data), let cgImage = uiImage.cgImage else {
+                isProcessing = false
+                return
+            }
+            let request = VNGenerateForegroundInstanceMaskRequest()
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            do {
+                try handler.perform([request])
+                guard let firstObservation = request.results?.first as? VNInstanceMaskObservation else {
+                    isProcessing = false
+                    return
+                }
+                // 全てのインスタンス（前景全体）でマスク生成
+                let mask = try firstObservation.generateScaledMaskForImage(forInstances: firstObservation.allInstances, from: handler)
+                let ciImage = CIImage(cgImage: cgImage)
+                let maskImage = CIImage(cvPixelBuffer: mask)
+                // --- 前景切り抜きを作成 ---
+                let compositor = CIFilter.blendWithMask()
+                compositor.inputImage = ciImage
+                compositor.backgroundImage = CIImage(color: .clear).cropped(to: ciImage.extent)
+                compositor.maskImage = maskImage
+
+                guard let cutoutCI = compositor.outputImage else {
+                    isProcessing = false
+                    return
+                }
+
+                // --- マスクの輪郭から細い線(アウトライン)を生成 ---
+                // 膨張(dilate)と収縮(erode)の差分＝輪郭帯
+                let dilated = maskImage.applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: outlineRadius])
+                let eroded  = maskImage.applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: outlineRadius])
+                let outlineBand = dilated.applyingFilter("CIDifferenceBlendMode", parameters: [kCIInputBackgroundImageKey: eroded])
+
+                // 指定色( Color(red:245/25, green:245/255, blue:245/255) )でアウトラインを作成
+                let strokeCIColor = CIColor(red: 245.0/25.0, green: 245.0/255.0, blue: 245.0/255.0, alpha: 1)
+                let strokeImage = CIImage(color: strokeCIColor).cropped(to: ciImage.extent)
+                let strokeBlend = CIFilter.blendWithMask()
+                strokeBlend.inputImage = strokeImage
+                strokeBlend.backgroundImage = cutoutCI
+                strokeBlend.maskImage = outlineBand
+
+                let context = CIContext()
+                guard let finalCI = strokeBlend.outputImage, let cgFinal = context.createCGImage(finalCI, from: ciImage.extent) else {
+                    isProcessing = false
+                    return
+                }
+                let result = UIImage(cgImage: cgFinal)
+                DispatchQueue.main.async {
+                    self.processedImage = result
+                }
+            } catch {
+                print("Vision error: \(error)")
+            }
+            isProcessing = false
+        }
+    }
+}
+
+extension UIImage {
+    func drawnWithOutline(outlineColor: UIColor, lineWidth: CGFloat) -> UIImage {
+        let rect = CGRect(origin: .zero, size: size)
+        UIGraphicsBeginImageContextWithOptions(size, false, scale)
+        let context = UIGraphicsGetCurrentContext()!
+        draw(in: rect)
+        context.saveGState()
+        context.setStrokeColor(outlineColor.cgColor)
+        context.setLineWidth(lineWidth)
+        context.setAlpha(0.7)
+        context.stroke(rect)
+        context.restoreGState()
+        let outlined = UIGraphicsGetImageFromCurrentImageContext() ?? self
+        UIGraphicsEndImageContext()
+        return outlined
+    }
+}
 
 struct GearView: View {
     let iconNames: [String: String] = [
@@ -26,11 +135,16 @@ struct GearView: View {
     }
     @State private var isPresentingSearch: Bool = false
 
+    // Custom initializer to optionally present weapon search immediately
+    init(startWithAddGear: Bool = false) {
+        _isPresentingSearch = State(initialValue: startWithAddGear)
+    }
+
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 16) {
 
-                let groupedGuns = Dictionary(grouping: ownedGuns) { $0.category }
+                let groupedGuns = Dictionary(grouping: ownedGuns) { $0.type }
                 let categories = ["ハンドガン", "ショットガン", "アサルト", "ライフル", "グレネード", "その他"]
 
                 categoryScrollView(groupedGuns: groupedGuns, categories: categories)
@@ -48,16 +162,51 @@ struct GearView: View {
                 }
                 .fullScreenCover(isPresented: $isPresentingSearch) {
                     WeaponSearchView(
+                        ownedGuns: $ownedGuns,
                         onWeaponAdded: { gun in
                             var categorizedGun = gun
-                            if gun.category == "アサルトライフル" {
-                                categorizedGun = Gun(id: gun.id, name: gun.name, imageURL: gun.imageURL, category: "アサルト")
-                            } else if gun.category == "スナイパーライフル" {
-                                categorizedGun = Gun(id: gun.id, name: gun.name, imageURL: gun.imageURL, category: "ライフル")
-                            } else if gun.category == "SMG" || gun.category == "サブマシンガン" {
-                                categorizedGun = Gun(id: gun.id, name: gun.name, imageURL: gun.imageURL, category: "その他")
+                            if gun.type == "アサルト" {
+                                categorizedGun = Gun(
+                                    id: gun.id,
+                                    name: gun.name,
+                                    type: "アサルト",
+                                    maker: gun.maker,
+                                    imageURL: gun.imageURL,
+                                    ageRating: gun.ageRating,
+                                    siteURL:gun.siteURL
+                                )
+                            } else if gun.type == "スナイパーライフル" {
+                                categorizedGun = Gun(
+                                    id: gun.id,
+                                    name: gun.name,
+                                    type: "ライフル",
+                                    maker: gun.maker,
+                                    imageURL: gun.imageURL,
+                                    ageRating: gun.ageRating,
+                                    siteURL:gun.siteURL
+                                )
+                            } else if gun.type == "SMG" || gun.type == "サブマシンガン" {
+                                categorizedGun = Gun(
+                                    id: gun.id,
+                                    name: gun.name,
+                                    type: "その他",
+                                    maker: gun.maker,
+                                    imageURL: gun.imageURL,
+                                    ageRating: gun.ageRating,
+                                    siteURL:gun.siteURL
+                                )
                             }
-                            ownedGuns.append(categorizedGun)
+                            if !ownedGuns.contains(where: { $0.identityKey == categorizedGun.identityKey }) {
+                                ownedGuns.append(categorizedGun)
+                                reloadOwnedGuns()
+                            } else {
+                                // 既に登録済み（同一アイテム）
+                                reloadOwnedGuns()
+                            }
+                        },
+                        onWeaponRemoved: { gun in
+                            ownedGuns.removeAll(where: { $0.identityKey == gun.identityKey })
+                            reloadOwnedGuns()
                         },
                         dismiss: {
                             isPresentingSearch = false
@@ -66,11 +215,28 @@ struct GearView: View {
                 }
             }
             .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(
+                ZStack {
+                    Image("BackGround_g")
+                        .resizable()
+                        .scaledToFill()
+                        .ignoresSafeArea()
+                }
+            )
             .navigationTitle("装備")
         }
         .onAppear {
-            if let decoded = try? JSONDecoder().decode([Gun].self, from: savedGunsData) {
+            if let decoded = try? JSONDecoder().decode([Gun].self, from: savedGunsData), !decoded.isEmpty {
                 ownedGuns = decoded
+            } else {
+                ownedGuns = [
+                    Gun(id: "test1", name: "M4A1", type: "アサルト", maker: "SampleMaker", imageURL: nil, ageRating: 10, siteURL: nil as String?),
+                    Gun(id: "test2", name: "グロック17", type: "ハンドガン", maker: "SampleMaker", imageURL: nil, ageRating: 10, siteURL: nil as String?)
+                ]
+                if let encoded = try? JSONEncoder().encode(ownedGuns) {
+                    savedGunsData = encoded
+                }
             }
         }
     }
@@ -86,7 +252,10 @@ struct GearView: View {
             ForEach(0..<categories.count, id: \.self) { (index: Int) in
                 let category = categories[index]
 
-                NavigationLink(destination: CategoryDetailView(category: category, guns: groupedGuns[category] ?? [])) {
+                NavigationLink(destination: CategoryDetailView(category: category, ownedGuns: $ownedGuns, onRemove: { gun in
+                    ownedGuns.removeAll { $0.identityKey == gun.identityKey }
+                    reloadOwnedGuns()
+                })) {
                     VStack(alignment: .leading, spacing: 8) {
                         if let iconName = iconNames[category] {
                             Image(iconName)
@@ -118,56 +287,54 @@ struct GearView: View {
         .padding(.horizontal)
     }
 
-    func fetchGuns(matching keyword: String) {
-        let escaped = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        guard let url = URL(string: "https://my-api-4aul.onrender.com/guns/search?q=\(escaped)") else { return }
-
-        URLSession.shared.dataTask(with: url) { data, response, error in
-            guard let data = data else { return }
-            _ = try? JSONDecoder().decode([Gun].self, from: data)
-        }.resume()
+    private func reloadOwnedGuns() {
+        if let decoded = try? JSONDecoder().decode([Gun].self, from: savedGunsData) {
+            ownedGuns = decoded
+        }
     }
+
 }
 
 struct CategoryDetailView: View {
     let category: String
-    let guns: [Gun]
+    @Binding var ownedGuns: [Gun]
+    let onRemove: (Gun) -> Void
+
+    private var guns: [Gun] {
+        var seen = Set<String>()
+        var unique: [Gun] = []
+        for g in ownedGuns where g.type == category {
+            if !seen.contains(g.identityKey) {
+                seen.insert(g.identityKey)
+                unique.append(g)
+            }
+        }
+        return unique
+    }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                // VStack(alignment: .leading, spacing: 8) {
-                //     Text("\(category)の装備")
-                //         .font(.largeTitle)
-                // }
-                // .padding()
-                EmptyView()
-
-                if guns.isEmpty {
-                    // Text("武器が登録されていません")
-                    //     .foregroundColor(.gray)
-                    //     .padding()
-                    EmptyView()
-                } else {
-                    ForEach(guns) { gun in
+        VStack {
+            Spacer(minLength: 0)
+            if guns.isEmpty {
+                VStack(spacing: 24) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.gray.opacity(0.6))
+                    Text("武器が登録されていません")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(guns, id: \.identityKey) { gun in
                         HStack {
-                            if let imageUrl = gun.imageURL {
-                                AsyncImage(url: imageUrl) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 60, height: 60)
-                                        .clipShape(RoundedRectangle(cornerRadius: 50))
-<<<<<<< HEAD
-                                        .overlay(RoundedRectangle(cornerRadius: 50).stroke(Color.gray, lineWidth: 2))
-=======
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-                                } placeholder: {
-                                    ProgressView()
-                                }
+                            if let imageUrl = gun.imageURLValue {
+                                ForegroundCutoutImage(imageUrl: imageUrl)
                             }
                             Text(gun.name)
                                 .font(.headline)
+                                .foregroundColor(.black)
                             Spacer()
                         }
                         .padding()
@@ -175,9 +342,20 @@ struct CategoryDetailView: View {
                         .cornerRadius(12)
                         .shadow(radius: 1)
                         .padding(.horizontal)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                onRemove(gun)
+                            } label: {
+                                Label("削除", systemImage: "trash")
+                            }
+                        }
                     }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
+                .listStyle(.plain)
             }
+            Spacer(minLength: 0)
         }
         .navigationTitle(category)
     }
@@ -186,14 +364,21 @@ struct CategoryDetailView: View {
 struct Gun: Identifiable, Codable {
     let id: String
     let name: String
-    let imageURL: URL?
-    let category: String
+    let type: String
+    let maker: String
+    let imageURL: String?
+    let ageRating: Int?
+    let siteURL: String?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case imageURL
-        case category = "type"
+    var imageURLValue: URL? {
+        if let urlString = imageURL {
+            return URL(string: urlString)
+        }
+        return nil
+    }
+
+    var identityKey: String {
+        "\(id)|\(name)|\(maker)"
     }
 }
 
@@ -203,24 +388,65 @@ struct WeaponSearchView: View {
     @State private var searchText: String = ""
     @State private var searchResults: [Gun] = []
     @State private var didSearch: Bool = false
+    @State private var isLoading = false
+    @Binding var ownedGuns: [Gun]
     let onWeaponAdded: (Gun) -> Void
+    let onWeaponRemoved: (Gun) -> Void
     let dismiss: () -> Void
-
+    
     @State private var isPresentingDetail: Bool = false
     @State private var selectedGun: Gun? = nil
 
-    var body: some View {
+    private var searchResultsView: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(searchResults, id: \.identityKey) { gun in
+                    Button(action: {
+                        selectedGun = gun
+                        isPresentingDetail = true
+                    }) {
+                        HStack(alignment: .center, spacing: 12) {
+                            if let url = gun.imageURLValue {
+                                ForegroundCutoutImage(imageUrl: url)
+                                    .frame(width: 60, height: 60)
+                            } else {
+                                Color.clear.frame(width: 60, height: 60)
+                            }
+                            Text(gun.name)
+                                .font(.headline)
+                                .foregroundColor(.black)
+                                .multilineTextAlignment(.leading)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color(red: 245/255, green: 245/255, blue: 245/255))
+                        .cornerRadius(10)
+                    }
+                }
+            }
+        }
+    }
+
+    private var emptyResultsView: some View {
+        VStack {
+            Spacer()
+            Text("該当するものはありませんでした")
+                .foregroundColor(.gray)
+            Spacer()
+        }
+    }
+    
+    private var mainContentView: some View {
         NavigationView {
             ZStack {
                 Color(UIColor.systemBackground)
                     .ignoresSafeArea()
-
+                
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         TextField("会社名や名前を入力", text: $searchText, onCommit: {
-                            performSearch()
+                            self.performSearch()
                         })
-<<<<<<< HEAD
                         .foregroundColor(colorScheme == .dark ? .white : .black)
                         .padding(10)
                         .background(colorScheme == .dark ? Color.black : Color.white)
@@ -232,147 +458,283 @@ struct WeaponSearchView: View {
                         .placeholder(when: searchText.isEmpty) {
                             Text("会社名や名前を入力")
                                 .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.5) : Color.black.opacity(0.5))
-=======
-                        .foregroundColor(.black)
-                        .padding(10)
-                        .background(Color.white)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.black, lineWidth: 1)
-                        )
-                        .placeholder(when: searchText.isEmpty) {
-                            Text("会社名や名前を入力")
-                                .foregroundColor(.gray)
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-                                .padding(10)
+                                .background(colorScheme == .dark ? Color.black : Color.white)
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(colorScheme == .dark ? Color.white : Color.black, lineWidth: 1)
+                                )
                         }
-
-                        Button(action: {
-                            print("🔘 検索ボタンがタップされました")
-                            performSearch()
-                        }) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(colorScheme == .dark ? .white : .black)
-                                .padding(10)
-                        }
-<<<<<<< HEAD
-                        .background(colorScheme == .dark ? Color.black : Color.white)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(colorScheme == .dark ? Color.white : Color.black, lineWidth: 1)
-=======
-                        .background(Color.white)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.black, lineWidth: 1)
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-                        )
                     }
-
+                    
                     if searchResults.isEmpty && didSearch {
-                        Spacer()
-                        Text("該当するものはありませんでした")
-                            .foregroundColor(.gray)
+                        emptyResultsView
                     } else {
-                        ScrollView {
-                            VStack(spacing: 12) {
-                                ForEach(searchResults) { gun in
-                                    Button(action: {
-                                        // Present detail view modally
-                                        selectedGun = gun
-                                        isPresentingDetail = true
-                                    }) {
-                                        HStack {
-                                            if let url = gun.imageURL {
-                                                AsyncImage(url: url) { image in
-                                                    image
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fit)
-                                                        .frame(width: 60, height: 60)
-                                                        .clipShape(RoundedRectangle(cornerRadius: 50))
-<<<<<<< HEAD
-                                                        .overlay(RoundedRectangle(cornerRadius: 50).stroke(Color.gray, lineWidth: 2))
-=======
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-                                                } placeholder: {
-                                                    ProgressView()
-                                                }
-                                            }
-                                            Text(gun.name)
-                                                .font(.headline)
-                                                .foregroundColor(.black)
-                                            Spacer()
-                                        }
-                                        .padding()
-                                        .background(Color(red: 245/255, green: 245/255, blue: 245/255))
-                                        .cornerRadius(10)
-                                    }
-                                }
-                            }
-                        }
+                        searchResultsView
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
-                .padding()
-                .navigationTitle("武器検索")
+                .padding(.horizontal)
+                
+                if isLoading {
+                    Color.black.opacity(0.2)
+                        .ignoresSafeArea()
+                    ProgressView()
+                        .scaleEffect(1.6)
+                }
+            }
+            .fullScreenCover(item: $selectedGun) { gun in
+                WeaponDetailView(
+                    gun: gun,
+                    ownedGuns: ownedGuns,
+                    onAdd: {
+                        onWeaponAdded(gun)
+                        self.selectedGun = nil
+                        self.isPresentingDetail = false
+                        dismiss()
+                    },
+                    onRemove: {
+                        onWeaponRemoved(gun)
+                        self.selectedGun = nil
+                        self.isPresentingDetail = false
+                        dismiss()
+                    }
+                )
+            }
+            .navigationTitle("武器検索")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        mainContentView
+    }
+    
+    private func dedup(_ guns: [Gun]) -> [Gun] {
+        var seen = Set<String>()
+        var result: [Gun] = []
+        for g in guns {
+            if !seen.contains(g.identityKey) {
+                seen.insert(g.identityKey)
+                result.append(g)
+            }
+        }
+        return result
+    }
+
+    private func performSearch() {
+        guard !searchText.isEmpty else { return }
+        isLoading = true
+        didSearch = false
+
+        guard let encodedQuery = searchText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://my-api-4aul.onrender.com/guns/search?q=\(encodedQuery)") else {
+            print("❌ URL 構築に失敗")
+            self.isLoading = false
+            self.didSearch = true
+            self.searchResults = []
+            return
+        }
+
+        print("🌐 API呼び出し: \(url)")
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                self.didSearch = true
+            }
+
+            if let error = error {
+                print("❌ API エラー: \(error)")
+                DispatchQueue.main.async {
+                    self.searchResults = []
+                }
+                return
+            }
+
+            guard let data = data else {
+                print("❌ データなし")
+                DispatchQueue.main.async {
+                    self.searchResults = []
+                }
+                return
+            }
+
+            do {
+                let decodedGuns = try JSONDecoder().decode([Gun].self, from: data)
+                let uniqueResults = dedup(decodedGuns)
+                // 🔎 サーバー側で既に検索済み。重複だけ除去して表示
+                DispatchQueue.main.async {
+                    self.searchResults = uniqueResults
+                    print("✅ Decoded guns: \(decodedGuns.count) → unique: \(uniqueResults.count)")
+                    uniqueResults.prefix(10).forEach { gun in
+                        print("• \(gun.name) [maker=\(gun.maker)] type=\(gun.type)")
+                    }
+                }
+            } catch {
+                print("❌ JSON デコード失敗: \(error)")
+                DispatchQueue.main.async {
+                    self.searchResults = []
+                }
+            }
+        }.resume()
+    }
+    
+    struct WeaponDetailView: View {
+        let gun: Gun
+        let ownedGuns: [Gun]
+        let onAdd: () -> Void
+        let onRemove: () -> Void
+        @Environment(\.presentationMode) var presentationMode
+        
+        var body: some View {
+            NavigationView {
+                ZStack {
+                    Color(UIColor.systemBackground)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 12) {
+                        Spacer().frame(height: 40)
+                        if let url = gun.imageURLValue {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    .fill(.regularMaterial)
+                                    .shadow(radius: 8)
+                                    .frame(width: UIScreen.main.bounds.width * 0.95,
+                                           height: UIScreen.main.bounds.height * 0.9)
+
+                                VStack(spacing: 12) {
+                                    ForegroundCutoutImage(imageUrl: url)
+                                        .frame(width: UIScreen.main.bounds.width * 0.9)
+                                        .frame(maxHeight: UIScreen.main.bounds.height * 0.4)
+                                        .clipped()
+                                        .padding()
+
+                                    Text(gun.name)
+                                        .font(.title)
+                                        .padding(.top)
+
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("種類: \(gun.type)")
+                                            .font(.body)
+                                            .foregroundColor(.primary)
+                                        Text("メーカー: \(gun.maker)")
+                                            .font(.body)
+                                            .foregroundColor(.primary)
+                                        if let rating = gun.ageRating {
+                                            Text("対象年齢: \(rating)歳以上")
+                                                .font(.body)
+                                                .foregroundColor(.primary)
+                                        }
+                                        if let site = gun.siteURL {
+                                            let normalizedSite = site.starts(with: "http") ? site : "https://\(site)"
+                                            if let url = URL(string: normalizedSite) {
+                                                Link("公式サイトを見る", destination: url)
+                                                    .font(.body)
+                                                    .foregroundColor(.blue)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                            .padding(.vertical)
+                        }
+                        Spacer()
+                    }
+                    VStack {
+                        Spacer()
+                        SwipeToAddButton(
+                            isAlreadyAdded: ownedGuns.contains(where: { $0.id == gun.id && $0.name == gun.name && $0.maker == gun.maker }),
+                            onAdd: {
+                                onAdd()
+                                presentationMode.wrappedValue.dismiss()
+                            },
+                            onRemove: {
+                                onRemove()
+                                presentationMode.wrappedValue.dismiss()
+                            }
+                        )
+                        .padding(.bottom, 30)
+                    }
+                }
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("閉じる") {
-                            dismiss()
+                        Button("戻る") {
+                            presentationMode.wrappedValue.dismiss()
                         }
                     }
                 }
             }
         }
-        .fullScreenCover(item: $selectedGun) { gun in
-            WeaponDetailView(
-                gun: gun,
-                onAdd: {
-                    onWeaponAdded(gun)
-                    self.selectedGun = nil
-                    self.isPresentingDetail = false
-                    dismiss()
-                }
-            )
-        }
     }
+    
+    struct SwipeToAddButton: View {
+        let isAlreadyAdded: Bool
+        let onAdd: (() -> Void)?
+        let onRemove: (() -> Void)?
+        @State private var offset: CGFloat = 0
+        private let railWidth: CGFloat = 340
+        private let railHeight: CGFloat = 90
+        private let circleSize: CGFloat = 74
+        private let padding: CGFloat = 8
 
-    func performSearch() {
-        print("🔎 検索ボタンを押しました: \(searchText)")
-        let escaped = searchText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "https://my-api-4aul.onrender.com/guns/search?q=\(escaped)"
-        print("検索URL: \(urlString)")
-        guard let url = URL(string: urlString) else { return }
+        var body: some View {
+            let maxOffset: CGFloat = railWidth - circleSize - padding*2
+            let normalizedOffset = offset / maxOffset
+            let progress: CGFloat = min(max(normalizedOffset, 0), 1)
+            let leftOffset = -(offset - (railWidth/2) + (circleSize/2) + padding)
+            let rightOffset = offset - (railWidth/2) + (circleSize/2) + padding
 
-        URLSession.shared.dataTask(with: url) { data, _, error in
-            if let error = error {
-                print("検索エラー: \(error.localizedDescription)")
-                return
+            ZStack {
+                Capsule()
+                    .fill(Color.primary.opacity(0.1))
+                    .frame(width: railWidth, height: railHeight)
+                Text(isAlreadyAdded ? "スワイプして削除" : "スワイプして追加")
+                    .foregroundColor(.primary)
+                    .font(.headline)
+                    .opacity(1.0 - progress)
+                    .offset(x: isAlreadyAdded ? -30 : 30)
+                Circle()
+                    .fill(isAlreadyAdded ? Color.red : Color.accentColor)
+                    .frame(width: circleSize, height: circleSize)
+                    .overlay(
+                        Image(systemName: isAlreadyAdded ? "arrow.left" : "arrow.right")
+                            .foregroundColor(.white)
+                            .font(.system(size: 28, weight: .bold))
+                    )
+                    .offset(x: isAlreadyAdded ? leftOffset : rightOffset)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                let newOffset = max(0, min(abs(value.translation.width), maxOffset))
+                                offset = newOffset
+                            }
+                            .onEnded { value in
+                                if offset > maxOffset - 8 {
+                                    if isAlreadyAdded {
+                                        onRemove?()
+                                    } else {
+                                        onAdd?()
+                                    }
+                                    withAnimation { offset = 0 }
+                                } else {
+                                    withAnimation { offset = 0 }
+                                }
+                            }
+                    )
             }
-            guard let data = data else {
-                print("データがありません")
-                return
-            }
-
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("📦 APIからのレスポンス: \(jsonString)")
-            }
-
-            do {
-                let guns = try JSONDecoder().decode([Gun].self, from: data)
-                DispatchQueue.main.async {
-                    searchResults = guns
-                    didSearch = true
-                    print("取得した武器数: \(guns.count)")
-                }
-            } catch {
-                print("デコード失敗: \(error.localizedDescription)")
-            }
-        }.resume()
+            .frame(width: railWidth, height: railHeight)
+            .padding()
+        }
     }
 }
 
@@ -391,149 +753,4 @@ extension View {
     }
 }
 
-struct WeaponDetailView: View {
-    let gun: Gun
-    let onAdd: () -> Void
-    @Environment(\.presentationMode) var presentationMode
 
-    var body: some View {
-        NavigationView {
-            ZStack {
-<<<<<<< HEAD
-                Color(UIColor.systemBackground)
-=======
-                Color.white
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-                    .ignoresSafeArea()
-
-                VStack(spacing: 20) {
-                    if let url = gun.imageURL {
-                        AsyncImage(url: url) { image in
-                            image
-                                .resizable()
-<<<<<<< HEAD
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 200)
-                                .clipped()
-                                .clipShape(RoundedRectangle(cornerRadius: 50))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 50)
-                                        .stroke(Color.gray, lineWidth: 2)
-                                )
-=======
-                                .aspectRatio(contentMode: .fit)
-                                .frame(height: 200)
-                                .clipShape(RoundedRectangle(cornerRadius: 50))
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-                        } placeholder: {
-                            ProgressView()
-                        }
-                    }
-
-                    Text(gun.name)
-                        .font(.title)
-                        .padding()
-
-                    SwipeToAddButton {
-                        onAdd()
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-                .padding()
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("戻る") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct SwipeToAddButton: View {
-    let onAdd: () -> Void
-    @State private var offset: CGFloat = 0
-    @State private var didAnimate: Bool = false
-    @State private var animationTimer: Timer?
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12)
-<<<<<<< HEAD
-                .fill(Color.primary)
-                .frame(height: 60)
-            Text("スワイプして追加")
-                .foregroundColor(Color(UIColor.systemBackground))
-=======
-                .fill(Color(UIColor { traitCollection in
-                    return traitCollection.userInterfaceStyle == .dark ? UIColor.white : UIColor.black
-                }))
-                .frame(height: 60)
-            Text("スワイプして追加")
-                .foregroundColor(Color(UIColor { traitCollection in
-                    return traitCollection.userInterfaceStyle == .dark ? UIColor.black : UIColor.white
-                }))
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-        }
-        .gesture(
-            DragGesture()
-                .onChanged { gesture in
-                    offset = max(0, gesture.translation.width)
-                }
-                .onEnded { gesture in
-                    if gesture.translation.width > 80 {
-                        withAnimation(.spring()) {
-                            offset = UIScreen.main.bounds.width
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            onAdd()
-                            offset = 0
-                        }
-                    } else {
-                        withAnimation {
-                            offset = 0
-                        }
-                    }
-                }
-        )
-        .offset(x: offset)
-        .onAppear {
-            guard !didAnimate else { return }
-            didAnimate = true
-
-            startBounceAnimation()
-            animationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-                startBounceAnimation()
-            }
-        }
-        .onDisappear {
-            animationTimer?.invalidate()
-            animationTimer = nil
-        }
-        .animation(.spring(), value: offset)
-    }
-
-    private func startBounceAnimation() {
-        guard offset == 0 else { return } // prevent animating if swipe has started
-
-        withAnimation(Animation.easeInOut(duration: 0.4)) {
-            offset = 20
-        }
-<<<<<<< HEAD
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-=======
-        DispatchQuçeue.main.asyncAfter(deadline: .now() + 0.4) {
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be
-            withAnimation(Animation.easeInOut(duration: 0.3)) {
-                offset = 0
-            }
-        }
-    }
-}
-<<<<<<< HEAD
-
-=======
->>>>>>> 804559e97eee42438a52a73468e722050fcc63be

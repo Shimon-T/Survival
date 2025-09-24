@@ -1,171 +1,415 @@
 import SwiftUI
-import MapKit
+import MapKit //地図や位置情報を扱うためのクラスや機能を提供
 import CoreLocation
+import Combine
+
+struct Field: Identifiable, Decodable {
+    let id: String
+    let name: String
+    let area: String
+    let city: String
+    let type: String
+    let age: String
+    let imageURL: String
+    let latitude: Double
+    let longitude: Double
+}
+
+struct FieldAnnotation: Identifiable {
+    let id: String
+    let coordinate: CLLocationCoordinate2D
+    let name: String
+    let address: String
+}
+
+enum SheetState { case min, mid, max, other }
 
 struct FieldSearchView: View {
-    @State private var sheetOffset: CGFloat = UIScreen.main.bounds.height * 0.35
-    @GestureState private var dragOffset = CGFloat.zero
-    @State private var searchText = ""
-    @State private var region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 35.681236, longitude: 139.767125), span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)) // Default to Tokyo
-    @StateObject private var locationManager = LocationManager()
-
-    @State private var showFilterSheet = false
-    @State private var isIndoor: Bool? = nil // nil=all, true=indoor, false=outdoor
-    @State private var ageLimit: Int? = nil // nil=all, 10=10禁, 18=18禁
-
+    @State private var locationManager = CLLocationManager()//デバイスの位置情報や方向を管理するクラス
+    @State private var locationDelegate: LocationDelegate? = nil
+    @State private var coordinateRegion = MKCoordinateRegion(//地図の表示領域を指定するための状態変数
+        center: CLLocationCoordinate2D(
+            latitude: 35.6809591,
+            longitude: 139.7673068
+        ), //東京の座標
+        latitudinalMeters: 10000, //表示範囲。緯度10km
+        longitudinalMeters: 10000 //表示範囲。経度10km
+    )
+    @State private var userTrackingMode: MapUserTrackingMode = .follow //ユーザーの位置追跡モード。.followで、ユーザーの位置を地図上で追跡。
+    @State private var lastKnownLocation: CLLocationCoordinate2D? = nil
+    
+    @State private var sheetOffset: CGFloat = 0
+    @GestureState private var dragOffset: CGFloat = 0
+    
+    @State private var searchText: String = ""
+    @State private var searchResults: [Field] = []
+    @State private var allFields: [Field] = []
+    
+    @State private var searchCancellable: AnyCancellable? = nil
+    
+    @State private var isSearching: Bool = false
+    
+    @FocusState private var isSearchFieldFocused: Bool
+    
+    
+    @State private var fieldAnnotations: [FieldAnnotation] = []
+    
+    @State private var selectedField: Field? = nil
+    
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
-                Map(coordinateRegion: $region, showsUserLocation: true)
-                    .ignoresSafeArea(edges: .bottom)
-                
-                VStack(spacing: 16) {
-                    Button(action: {
-                        if let location = locationManager.lastLocation {
-                            region.center = location.coordinate
-                        }
-                    }) {
-                        Image(systemName: "location.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(.blue)
-                            .frame(width: 44, height: 44)
-                            .background(Color.white)
-                            .clipShape(Circle())
-                            .shadow(radius: 4, y: 2)
-                    }
-                    Button(action: { showFilterSheet = true }) {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 24))
-                            .foregroundColor(.primary)
-                            .frame(width: 44, height: 44)
-                            .background(Color.white)
-                            .clipShape(Circle())
-                            .shadow(radius: 4, y: 2)
-                    }
-                    Spacer(minLength: 0)
+        GeometryReader { geometry in
+            let screenHeight = geometry.size.height
+            let minHeight: CGFloat = 160
+            let midHeight: CGFloat = screenHeight / 2
+            let maxHeight: CGFloat = screenHeight * 0.95
+            let currentOffset = sheetOffset + dragOffset
+            let clampedOffset = max(minHeight, min(maxHeight, currentOffset))
+            let sheetState: SheetState = {
+                if abs(clampedOffset - minHeight) < 1 {
+                    return .min
+                } else if abs(clampedOffset - midHeight) < 1 {
+                    return .mid
+                } else if abs(clampedOffset - maxHeight) < 1 {
+                    return .max
+                } else {
+                    return .other
                 }
-                .padding(.top, 10)
-                .padding(.trailing, 10)
-                .frame(maxWidth: .infinity, alignment: .topTrailing)
-                
-                GeometryReader { geometry in
-                    let minHeight = geometry.size.height * 0.8
-                    let maxHeight = geometry.size.height * 0.15
-                    let maxSheetOffset = minHeight
+            }()
+
+            ZStack(alignment: .topTrailing) {
+                ZStack(alignment: .bottomTrailing) {
+                    Map( //Mapビュー
+                        coordinateRegion: $coordinateRegion, //MKCoordinateRegionの状態を指定（必須）
+                        interactionModes: .all, //パンとズームの許可
+                        showsUserLocation: true, //現在位置の表示
+                        userTrackingMode: $userTrackingMode,
+                        annotationItems: fieldAnnotations
+                    ) { annotation in
+                        MapAnnotation(coordinate: annotation.coordinate) {
+                            Button(action: {
+                                // Find the corresponding field
+                                if let field = (allFields + searchResults).first(where: { $0.id == annotation.id }) {
+                                    selectedField = field
+                                }
+                            }) {
+                                Image(systemName: "mappin")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 32, height: 32)
+                                    .foregroundColor(.red)
+                                    .shadow(radius: 4)
+                                    .alignmentGuide(.top) { d in d[.bottom] } // ピンの先端を座標に合わせる
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .edgesIgnoringSafeArea(.all) //セーフエリアを除外
                     
-                    VStack {
+                    // Sheet
+                    VStack(spacing: 16) {
                         Capsule()
-                            .frame(width: 40, height: 6)
-                            .foregroundColor(Color(.systemGray4))
+                            .frame(width: 40, height: 5)
+                            .foregroundColor(Color.gray.opacity(0.5))
                             .padding(.top, 8)
-                            .padding(.bottom, 4)
+                        
                         HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
-                            TextField("フィールド名や場所で検索", text: $searchText)
-                                .textFieldStyle(PlainTextFieldStyle())
-                                .padding(8)
+                            TextField("フィールド検索", text: $searchText)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .focused($isSearchFieldFocused)
+                                .onSubmit {
+                                    print("[DEBUG] onSubmit fired, searchText=\(searchText)")
+                                    performFieldSearch()
+                                }
+                                .onChange(of: searchText) { newValue in
+                                    if newValue.isEmpty {
+                                        searchResults = []
+                                        loadAllFields()
+                                    }
+                                }
                         }
                         .padding(.horizontal)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                        .padding(.bottom, 8)
-
-                        // Placeholder for search results
-                        if !searchText.isEmpty {
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    ForEach(0..<5) { i in
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color(.systemGray5))
-                                            .frame(height: 44)
-                                            .overlay(
-                                                Text("サンプル結果 \(i+1): \(searchText) - \(isIndoor == true ? "室内" : isIndoor == false ? "屋外" : "全て") / \(ageLimit == 10 ? "10禁" : ageLimit == 18 ? "18禁" : "全年齢")")
-                                                    .foregroundColor(.primary)
-                                                    .padding(.leading, 16), alignment: .leading
-                                            )
+                        .padding(.top, 8)
+                        .zIndex(1)
+                        
+                        ScrollView {
+                            if isSearching {
+                                VStack {
+                                    Spacer(minLength: 32)
+                                    HStack { Spacer(); ProgressView(); Spacer() }
+                                    Spacer()
+                                }
+                            } else {
+                                let filteredResults = searchResults
+                                LazyVStack(alignment: .leading, spacing: 0) {
+                                    ForEach(filteredResults) { field in
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(field.name)
+                                                    .font(.headline)
+                                                    .bold()
+                                                Text("\(field.area)・\(field.city)")
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.secondary)
+                                                Text(field.type)
+                                                    .font(.caption)
+                                                    .foregroundColor(.accentColor)
+                                            }
+                                            // Optionally, display image using AsyncImage here if desired:
+                                            // AsyncImage(url: URL(string: field.imageURL)) { image in
+                                            //     image.resizable()
+                                            // } placeholder: {
+                                            //     Color.gray.opacity(0.3)
+                                            // }
+                                            // .frame(width: 60, height: 60)
+                                            // .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            Spacer()
+                                        }
+                                        .padding()
+                                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.systemBackground)))
+                                        .shadow(radius: 2, y: 1)
+                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 4)
+                                        .onTapGesture {
+                                            let address = field.area + field.city
+                                            let geocoder = CLGeocoder()
+                                            isSearching = true
+                                            geocoder.geocodeAddressString(address) { placemarks, error in
+                                                isSearching = false
+                                                if let location = placemarks?.first?.location {
+                                                    withAnimation {
+                                                        sheetOffset = midHeight
+                                                    }
+                                                    withAnimation {
+                                                        if sheetState == .mid {
+                                                            let shift = coordinateRegion.span.latitudeDelta * 0.2
+                                                            let newCenter = CLLocationCoordinate2D(latitude: location.coordinate.latitude - shift, longitude: location.coordinate.longitude)
+                                                            coordinateRegion = MKCoordinateRegion(center: newCenter, span: coordinateRegion.span)
+                                                        } else {
+                                                            coordinateRegion = MKCoordinateRegion(center: location.coordinate, span: coordinateRegion.span)
+                                                        }
+                                                    }
+                                                } else {
+                                                    print("[DEBUG] Failed to geocode \(address): \(error?.localizedDescription ?? "nil")")
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 .padding(.horizontal)
                             }
-                        } else {
-                            Spacer()
                         }
+                        
+                        Spacer()
                     }
-                    .frame(maxWidth: .infinity)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .offset(y: min(max(sheetOffset + dragOffset, maxHeight), maxSheetOffset))
-                    .animation(.interactiveSpring(), value: sheetOffset + dragOffset)
+                    .frame(width: geometry.size.width, height: maxHeight, alignment: .top)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                    .offset(y: screenHeight - clampedOffset)
+                    .animation(.interactiveSpring(), value: clampedOffset)
                     .gesture(
                         DragGesture()
                             .updating($dragOffset) { value, state, _ in
-                                state = value.translation.height
+                                let newOffset = sheetOffset + value.translation.height * -1
+                                state = max(minHeight, min(maxHeight, newOffset)) - sheetOffset
                             }
                             .onEnded { value in
-                                let newOffset = sheetOffset + value.translation.height
-                                let clamped = min(max(newOffset, maxHeight), maxSheetOffset)
-                                withAnimation(.interactiveSpring()) {
-                                    sheetOffset = clamped
+                                let newOffset = sheetOffset + value.translation.height * -1
+                                let positions = [minHeight, midHeight, maxHeight]
+                                // Find nearest position
+                                let nearest = positions.min(by: { abs($0 - newOffset) < abs($1 - newOffset) }) ?? midHeight
+                                withAnimation {
+                                    sheetOffset = nearest
                                 }
                             }
                     )
-                }
-                .ignoresSafeArea(edges: .bottom)
-            }
-            .navigationTitle("フィールドを検索")
-            .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showFilterSheet) {
-                NavigationView {
-                    Form {
-                        Section(header: Text("種類")) {
-                            Picker("", selection: $isIndoor) {
-                                Text("すべて").tag(nil as Bool?)
-                                Text("室内").tag(true as Bool?)
-                                Text("屋外").tag(false as Bool?)
-                            }
-                            .pickerStyle(.segmented)
-                        }
-                        Section(header: Text("年齢制限")) {
-                            Picker("", selection: $ageLimit) {
-                                Text("すべて").tag(nil as Int?)
-                                Text("10禁").tag(10 as Int?)
-                                Text("18禁").tag(18 as Int?)
-                            }
-                            .pickerStyle(.segmented)
+                    .onAppear {
+                        sheetOffset = minHeight
+                        if isSearchFieldFocused {
+                            sheetOffset = maxHeight
                         }
                     }
-                    .navigationTitle("絞り込み")
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("閉じる") { showFilterSheet = false }
+                    .onChange(of: isSearchFieldFocused) { focused in
+                        if focused {
+                            withAnimation {
+                                sheetOffset = maxHeight
+                            }
                         }
                     }
                 }
+                
+                if sheetState != .max {
+                    Button {
+                        if let location = lastKnownLocation {
+                            withAnimation {
+                                if sheetState == .mid {
+                                    let shift = coordinateRegion.span.latitudeDelta * 0.2
+                                    let newCenter = CLLocationCoordinate2D(latitude: location.latitude - shift, longitude: location.longitude)
+                                    coordinateRegion = MKCoordinateRegion(center: newCenter, span: coordinateRegion.span)
+                                } else {
+                                    coordinateRegion = MKCoordinateRegion(center: location, span: coordinateRegion.span)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.blue.opacity(0.8))
+                            .clipShape(Circle())
+                            .shadow(radius: 4)
+                    }
+                    .padding(.top, 32)
+                    .padding(.trailing, 16)
+                }
+                // sheetState == .max or .otherでは非表示
             }
+        }
+        .onAppear{
+            let delegate = LocationDelegate { location in
+                lastKnownLocation = location.coordinate
+            }
+            locationDelegate = delegate
+            locationManager.delegate = delegate
+            locationManager.requestWhenInUseAuthorization() //位置情報を使用する許可を求める為に使用
+            locationManager.startUpdatingLocation() //デバイスの現在位置の更新を開始するために使用
+            loadAllFields()
+        }
+        .sheet(item: $selectedField) { field in
+            VStack(spacing: 16) {
+                if let url = URL(string: field.imageURL) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fit).frame(maxWidth: 200)
+                    } placeholder: {
+                        Color.gray.frame(width: 200, height: 120)
+                    }
+                }
+                Text(field.name)
+                    .font(.title2)
+                    .bold()
+                Text("\(field.area)・\(field.city)")
+                    .font(.body)
+                Text("種類: \(field.type)  年齢: \(field.age)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Button("閉じる") {
+                    selectedField = nil
+                }
+            }
+            .padding()
+            .presentationDetents([.fraction(0.35), .medium, .large])
+        }
+    }
+    
+    private func performFieldSearch() {
+        print("[DEBUG] performFieldSearch (local mode), searchText=\(searchText)")
+        guard !searchText.isEmpty else {
+            searchResults = []
+            loadAllFields()
+            return
+        }
+
+        isSearching = true
+        DispatchQueue.global().async {
+            guard let url = Bundle.main.url(forResource: "fields", withExtension: "json"),
+                  let data = try? Data(contentsOf: url),
+                  let fields = try? JSONDecoder().decode([Field].self, from: data) else {
+                DispatchQueue.main.async {
+                    print("[ERROR] Failed to search local fields.json")
+                    searchResults = []
+                    loadAllFields()
+                    isSearching = false
+                }
+                return
+            }
+
+            let query = searchText.lowercased()
+            let results = fields.filter { field in
+                field.name.lowercased().contains(query) ||
+                field.area.lowercased().contains(query) ||
+                field.city.lowercased().contains(query) ||
+                field.type.lowercased().contains(query)
+            }
+
+            DispatchQueue.main.async {
+                isSearching = false
+                searchResults = results
+                updateAnnotations(for: results)
+            }
+        }
+    }
+    
+    private func loadAllFields() {
+        guard let url = Bundle.main.url(forResource: "fields", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let results = try? JSONDecoder().decode([Field].self, from: data) else {
+            print("[ERROR] Failed to load local fields.json")
+            return
+        }
+
+        DispatchQueue.main.async {
+            allFields = results
+            if searchText.isEmpty {
+                updateAnnotations(for: results)
+            }
+        }
+    }
+    
+    private func updateAnnotations(for fields: [Field]) {
+        fieldAnnotations = fields.map { field in
+            FieldAnnotation(
+                id: field.id,
+                coordinate: CLLocationCoordinate2D(latitude: field.latitude, longitude: field.longitude),
+                name: field.name,
+                address: field.city
+            )
         }
     }
 }
 
-class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    private let manager = CLLocationManager()
-    @Published var lastLocation: CLLocation?
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.requestWhenInUseAuthorization()
-        manager.startUpdatingLocation()
+private class LocationDelegate: NSObject, CLLocationManagerDelegate {
+    var onUpdate: (CLLocation) -> Void
+    
+    init(onUpdate: @escaping (CLLocation) -> Void) {
+        self.onUpdate = onUpdate
     }
-
+    
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        lastLocation = locations.last
+        if let location = locations.last {
+            DispatchQueue.main.async {
+                self.onUpdate(location)
+            }
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        // エラー処理は必要に応じて実装可能
     }
 }
 
-#Preview {
-    ContentView(selectedTab: 2)
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
+
+// CornerRadius extension for specific corners
+fileprivate extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape( RoundedCorner(radius: radius, corners: corners) )
+    }
+}
+
+fileprivate struct RoundedCorner: Shape {
+
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
 }

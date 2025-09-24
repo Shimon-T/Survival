@@ -1,0 +1,167 @@
+[
+  {
+    "id": "f1",
+    "name": "ASOBIBA 池袋フィールド",
+    "area": "東京",
+    "city": "東京都豊島区南池袋3丁目9-5",
+    "latitude": 35.7265,
+    "longitude": 139.7148,
+    "age": "10",
+    "type": "インドア",
+    "imageURL": "https://asobiba-tokyo.com/wp/wp-content/uploads/2019/08/ikebukuro_top.jpg"
+  },
+  {
+    "id": "f2",
+    "name": "ASOBIBA 新木場フィールド",
+    "area": "東京",
+    "city": "東京都江東区新木場1丁目2-17",
+    "latitude": 35.6429,
+    "longitude": 139.8299,
+    "age": "all",
+    "type": "インドア",
+    "imageURL": "https://asobiba-tokyo.com/wp/wp-content/uploads/2018/04/%E3%83%A1%E3%82%A4%E3%83%B3.jpg"
+  },
+  {
+    "id": "f3",
+    "name": "BravePoint 台場店",
+    "area": "東京",
+    "city": "東京都港区台場1丁目6-1",
+    "latitude": 35.6268,
+    "longitude": 139.7756,
+    "age": "10",
+    "type": "インドア",
+    "imageURL": "https://lh3.googleusercontent.com/p/AF1QipNjcdH51w7edr04TtHI69ogR2mD_-F1TEgMV4-C=s680-w680-h510"
+  },
+  {
+    "id": "f4",
+    "name": "Field OPS",
+    "area": "東京",
+    "city": "東京都稲城市坂浜734",
+    "latitude": 35.6261,
+    "longitude": 139.4933,
+    "age": "18",
+    "type": "アウトドア",
+    "imageURL": "https://sabage-town.com/media/wp-content/uploads/2020/11/%E5%90%8D%E7%A7%B0%E6%9C%AA%E8%A8%AD%E5%AE%9A-1.png"
+  },
+  {
+    "id": "f5",
+    "name": "TENKOO",
+    "area": "東京",
+    "city": "東京都八王子市高月町2205",
+    "latitude": 35.7009,
+    "longitude": 139.3169,
+    "age": "18",
+    "type": "アウトドア",
+    "imageURL": "https://tenkoo.tokyo/1496985216249.jpg"
+  },
+  {
+    "id": "f6",
+    "name": "BravePoint 新宿店",
+    "area": "東京",
+    "city": "新宿区新宿1-20-1",
+    "latitude": 35.695856,
+    "longitude": 139.701466,
+    "age": "all",
+    "type": "インドア",
+    "imageURL": "https://shinjuku.brave-point.jp/wp-content/themes/shinjuku/images/shinjuku/studio/eq_img01.jpg"
+  },
+  {
+    "id": "f7",
+    "name": "BLKFOX サバイバルゲームフィールド",
+    "area": "東京",
+    "city": "福生市福生768",
+    "latitude": 35.7421243,
+    "longitude": 139.3275329,
+    "age": "all",
+    "type": "インドア",
+    "imageURL": "https://lh3.googleusercontent.com/p/AF1QipO74h3jE1zDiAPXhzwf-k7Ke_fzbNYCI-Sxin5S=s680-w680-h510"
+  },
+  {
+    "id": "f8",
+    "name": "ラムラム",
+    "area": "東京",
+    "city": "葛飾区東四つ木2-9-7",
+    "latitude": 35.730058,
+    "longitude": 139.845016,
+    "age": "all",
+    "type": "インドア",
+    "imageURL": "https://lh3.googleusercontent.com/gps-cs-s/AC9h4nrGPKo_Rdd-p5tSC4cyMiS3PBY8h2VQMoxnlUa8MJA6U-DPUxFizhjNos5Wwit4f4r_NhbvCjjBhkblZFnnqIvaZCphLTik83ZCOHrgIzmwA5CHhAKxl5vajpvr-ldMmQK2vxs=s680-w680-h510"
+  },
+  {
+    "id": "f9",
+    "name": "ATTACKER",
+    "area": "神奈川県",
+    "city": "横浜市港北区新吉田町６０６１",
+    "latitude": 35.541629,
+    "longitude": 139.608059,
+    "age": "all",
+    "type": "インドア",
+    "imageURL": "https://www.hyperdouraku.com/survivalgame/attacker/images/title.jpg"
+  },
+  {
+    "id": "f10",
+    "name": "IBF9",
+    "area": "東京都",
+    "city": "八王子市下恩方町２９３８",
+    "latitude": 35.663566,
+    "longitude": 139.242305,
+    "age": "all",
+    "type": "インドア",
+    "imageURL": "https://asset.watch.impress.co.jp/img/hbw/docs/1613/183/0_l.jpg"
+  },
+  {
+    "id": "f11",
+    "name": "東京サバゲパーク",
+    "area": "千葉県",
+    "city": "印西市草深3筆 草深字仲ノ側258番1他",
+    "latitude": 35.790691,
+    "longitude": 140.150265,
+    "age": "all",
+    "type": "アウトドア",
+    "imageURL": "https://lh3.googleusercontent.com/gps-cs-s/AC9h4nodNzX3ppmhRXzmF-mC1dt-PYyo5Twa5ZTeAGZJ-m7QkAfVv3CTX-h59CIOlpxkpbJZmQ2VkIAelA6-p_lKxrKGBKwzRg0RZFdqbKCB0HCI6QezBXC1ry54d6-Jchdd0-BE7Rg=w289-h312-n-k-no"
+  },
+  {
+    "id": "f12",
+    "name": "サバイバルカントリー",
+    "area": "茨城県",
+    "city": "龍ケ崎市貝原塚町",
+    "latitude": 35.9005,
+    "longitude": 140.1663,
+    "age": "all",
+    "type": "アウトドア",
+    "imageURL": "https://lh3.googleusercontent.com/gps-cs-s/AC9h4nqkYbw_vK98ls2fWig1z3gIIXNysktn_I0y5u2UspjwegjDUqQbmWsnur_MWOa41ybTbY70dMFjgefkXTt2OlL1m_t6cdm3pqB-a9lTcgfYJXr_vOTA_kvaWhQQ9Bxpf_Cviks=s680-w680-h510"
+  },
+  {
+    "id": "f14",
+    "name": "CIMAX",
+    "area": "埼玉県",
+    "city": "加須市小野袋",
+    "latitude": 36.1083,
+    "longitude": 139.6056,
+    "age": "all",
+    "type": "アウトドア",
+    "imageURL": "https://i0.wp.com/www.cimax.jp/wp-content/uploads/2021/05/IMG_9882.jpg?fit=768%2C512&ssl=1"
+  },
+  {
+    "id": "f15",
+    "name": "Beam",
+    "area": "千葉県",
+    "city": "印西市船尾",
+    "latitude": 35.8291,
+    "longitude": 140.1692,
+    "age": "all",
+    "type": "アウトドア",
+    "imageURL": "https://beam-sg.com/wp-content/uploads/2017/03/10-1.jpg"
+  },
+  {
+    "id": "f16",
+    "name": "ユニオンベース",
+    "area": "千葉県",
+    "city": "印西市平賀",
+    "latitude": 35.8416,
+    "longitude": 140.1989,
+    "age": "all",
+    "type": "アウトドア",
+    "imageURL": "https://union-base.com/wp-content/themes/base/images/sitetitle.png"
+  }
+]
