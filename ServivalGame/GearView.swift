@@ -593,6 +593,7 @@ struct WeaponSearchView: View {
         let onAdd: () -> Void
         let onRemove: () -> Void
         @Environment(\.presentationMode) var presentationMode
+        @State private var cardOffsetY: CGFloat = 0
         
         var body: some View {
             NavigationView {
@@ -601,25 +602,30 @@ struct WeaponSearchView: View {
                         .ignoresSafeArea()
 
                     VStack(spacing: 12) {
-                        Spacer().frame(height: 40)
+                        Spacer().frame(height: 10)
                         if let url = gun.imageURLValue {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                                     .fill(.regularMaterial)
                                     .shadow(radius: 8)
-                                    .frame(width: UIScreen.main.bounds.width * 0.95,
-                                           height: UIScreen.main.bounds.height * 0.9)
-
-                                VStack(spacing: 12) {
-                                    ForegroundCutoutImage(imageUrl: url)
-                                        .frame(width: UIScreen.main.bounds.width * 0.9)
-                                        .frame(maxHeight: UIScreen.main.bounds.height * 0.4)
-                                        .clipped()
-                                        .padding()
+                                    .frame(
+                                        width: UIScreen.main.bounds.width * 0.9,
+                                        height: UIScreen.main.bounds.height * 0.5
+                                    )
+                                VStack(spacing: 10) {
+                                    // Conditional frame for grenade/other or others
+                                    if gun.type == "グレネード" || gun.type == "その他" {
+                                        ForegroundCutoutImage(imageUrl: url)
+                                            .frame(height: 200)
+                                            .clipped()
+                                    } else {
+                                        ForegroundCutoutImage(imageUrl: url)
+                                            .frame(width: UIScreen.main.bounds.width * 0.9)
+                                            .clipped()
+                                    }
 
                                     Text(gun.name)
                                         .font(.title)
-                                        .padding(.top)
 
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("種類: \(gun.type)")
@@ -646,6 +652,9 @@ struct WeaponSearchView: View {
                                 }
                             }
                             .padding(.vertical)
+                            .offset(y: cardOffsetY)
+                            .animation(.spring(), value: cardOffsetY)
+                            Spacer().frame(height: 20)
                         }
                         Spacer()
                     }
@@ -660,6 +669,9 @@ struct WeaponSearchView: View {
                             onRemove: {
                                 onRemove()
                                 presentationMode.wrappedValue.dismiss()
+                            },
+                            onProgress: { progress in
+                                cardOffsetY = -progress * 40
                             }
                         )
                         .padding(.bottom, 30)
@@ -681,6 +693,7 @@ struct WeaponSearchView: View {
         let isAlreadyAdded: Bool
         let onAdd: (() -> Void)?
         let onRemove: (() -> Void)?
+        let onProgress: ((CGFloat) -> Void)?
         @State private var offset: CGFloat = 0
         private let railWidth: CGFloat = 340
         private let railHeight: CGFloat = 90
@@ -693,6 +706,9 @@ struct WeaponSearchView: View {
             let progress: CGFloat = min(max(normalizedOffset, 0), 1)
             let leftOffset = -(offset - (railWidth/2) + (circleSize/2) + padding)
             let rightOffset = offset - (railWidth/2) + (circleSize/2) + padding
+
+            // Call progress callback
+            onProgress?(progress)
 
             ZStack {
                 Capsule()
