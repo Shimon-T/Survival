@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct JournalView: View {
     @State private var entries: [JournalEntry] = []
@@ -215,6 +216,8 @@ struct JournalView: View {
     }
 
     private func deleteEntries(at offsets: IndexSet) {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
         entries.remove(atOffsets: offsets)
         persistEntries()
     }
