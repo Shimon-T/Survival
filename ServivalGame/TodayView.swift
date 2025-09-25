@@ -10,7 +10,6 @@ import PhotosUI
 import UIKit
 import TOCropViewController
 
-// Wrapper to make Data Identifiable for .sheet(item:)
 struct IdentifiableData: Identifiable {
     var id = UUID()
     let data: Data
@@ -33,9 +32,9 @@ struct TodayView: View {
     
     @State private var isEditingName = false
     @FocusState private var isNameFieldFocused: Bool
-    @State private var playCount: Int = 0 // Added playCount state
+    @State private var playCount: Int = 0
     
-    @State private var isShowingMyCardDetail = false // added for my card sheet presentation
+    @State private var isShowingMyCardDetail = false
 
     let cardMaxWidth = UIScreen.main.bounds.width * 0.8
 
@@ -92,7 +91,6 @@ struct TodayView: View {
             VStack(spacing: 24) {
                 Spacer().frame(height: 50)
                 
-                // --- マイカード上部 ---
                 MyCardView(
                     cardMaxWidth: cardMaxWidth,
                     userName: userName,
@@ -105,7 +103,6 @@ struct TodayView: View {
                     }
                 )
                 .padding(.horizontal, 12)
-                // -------------------
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("最近のプレイ履歴")
@@ -114,32 +111,27 @@ struct TodayView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let entry = latestJournalEntry {
                         VStack(alignment: .leading, spacing: 4) {
-                            // Field name (bold, headline)
                             Text(entry.fieldName)
                                 .font(.headline)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            // Date/time (caption, secondary)
                             Text(entry.date, style: .date)
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.7))
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            // Content (subheadline/caption)
                             if !entry.gameContent.isEmpty {
                                 Text(entry.gameContent)
                                     .font(.subheadline)
                                     .foregroundColor(.white.opacity(0.9))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            // Weapons (caption2)
                             if !entry.weapons.isEmpty {
                                 Text("武器: \(entry.weapons.joined(separator: ", "))")
                                     .font(.caption2)
                                     .foregroundColor(.white.opacity(0.8))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            // Result (caption2, slightly more prominent)
                             Text("勝敗: \(entry.result.displayText)")
                                 .font(.caption2)
                                 .foregroundColor(.white.opacity(0.8))
@@ -226,10 +218,6 @@ struct TodayView: View {
                 }
                 .frame(width: 300)
                 .padding(.horizontal, 12)
-
-                // --- マイカード下部（予備・削除済）---
-                // この下部のMyCardViewは削除しました。
-                // -----------------------------
 
                 Spacer(minLength: 12)
             }
@@ -430,15 +418,6 @@ struct IconSelectionSheet: View {
     }
 }
 
-// Suggestion for JournalStore removal of UserDefaults key when all records deleted
-// This is NOT part of TodayView.swift but to fulfill instruction:
-//
-// In JournalStore.swift (not shown here), inside the method that deletes entries, add:
-//
-// if entries.isEmpty {
-//     UserDefaults.standard.removeObject(forKey: "JournalEntries")
-// }
-
 struct GunEntrySheet: View {
     @Binding var favoriteGun: String
     @Binding var suggestions: [TodayView.Gun]
@@ -531,9 +510,6 @@ struct CircularImageCropperView: UIViewControllerRepresentable {
     }
 }
 
-// MARK: - MyCardView and MyCardDetailView
-// Updated MyCardView to show userName, user icon (image or system), playCount, and matching bottom card design
-
 struct MyCardView: View {
     let cardMaxWidth: CGFloat
     let userName: String
@@ -550,7 +526,6 @@ struct MyCardView: View {
                     .opacity(0.85)
 
                 VStack(spacing: 12) {
-                    // --- Title at top left ---
                     HStack {
                         Text("マイカード")
                             .font(.headline)
@@ -558,7 +533,6 @@ struct MyCardView: View {
                             .foregroundColor(.white)
                         Spacer()
                     }
-                    // User icon
                     if let data = storedImageData, let uiImage = UIImage(data: data) {
                         Image(uiImage: uiImage)
                             .resizable()
@@ -577,7 +551,6 @@ struct MyCardView: View {
                             .shadow(radius: 4)
                     }
                     
-                    // User name
                     Text(userName.isEmpty ? "ユーザー名" : userName)
                         .font(.title2)
                         .fontWeight(.semibold)
@@ -586,7 +559,6 @@ struct MyCardView: View {
                         .minimumScaleFactor(0.7)
                         .padding(.horizontal, 16)
                     
-                    // Play count
                     Text("プレイ回数: \(playCount)回")
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.9))
@@ -614,17 +586,14 @@ struct MyCardDetailView: View {
     @State private var showIconSelection = false
     @State private var showPhotoLibrary = false
     
-    // Journal entries decoded for stats
     private var journalEntries: [JournalEntry] {
         (try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData)) ?? []
     }
     
-    // Calculate play counts
     private var playCount: Int {
         journalEntries.count
     }
     
-    // 勝敗結果が enum GameResult? 型のため、optionalチェーンや lowercased() を使わずに型安全に比較するよう修正
     private var winCount: Int {
         journalEntries.filter { $0.result == .win }.count
     }
@@ -636,7 +605,7 @@ struct MyCardDetailView: View {
     }
     
     private var totalCount: Int {
-        max(playCount, 1) // avoid zero division
+        max(playCount, 1)
     }
     
     private var winRate: Double {
@@ -653,29 +622,23 @@ struct MyCardDetailView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
-                    // --- ユーザーアイコン表示エリア ---
                     userIconButton
                         .padding(.top, 30)
                     
-                    // --- ユーザー名編集エリア ---
-                    // *** 修正: 中央寄せ・フォント大きく、鉛筆マークは下に小さく配置 ***
                     userNameView
                     
-                    // --- プレイ回数表示 ---
-                    // *** 修正: フォントを少し小さく調整(.title3), かつ中央寄せ ***
                     Text("プレイ回数: \(playCount)回")
                         .font(.title3)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
                         .frame(maxWidth: .infinity, alignment: .center)
                     
-                    // --- 勝率半円グラフと数値表示 ---
                     VStack(spacing: 12) {
                         Text("勝率")
                             .font(.headline)
                         
                         HalfPieChart(winRate: winRate, loseRate: loseRate, drawRate: drawRate)
-                            .frame(width: 250, height: 125) // 高さを半分にして半円がきれいに表示されるよう調整
+                            .frame(width: 250, height: 125)
                         
                         HStack(spacing: 24) {
                             StatLegend(color: .green, label: "勝ち", rate: winRate)
@@ -727,10 +690,8 @@ struct MyCardDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var photoItem: PhotosPickerItem? = nil
     
-    // --- ユーザーアイコンボタン ---
     private var userIconButton: some View {
         Button {
-            // アイコン選択sheetを表示
             showIconSelection = true
         } label: {
             Group {
@@ -752,8 +713,6 @@ struct MyCardDetailView: View {
         .buttonStyle(PlainButtonStyle())
     }
     
-    // --- ユーザー名編集ビュー ---
-    // HStackでTextとpencilアイコンを横並び、適切なスペースとスケーリングで中央寄せ
     private var userNameView: some View {
         HStack(spacing: 6) {
             if isEditingName {
@@ -798,11 +757,6 @@ struct MyCardDetailView: View {
     }
 }
 
-// --- 半円グラフ (PieChart) 表示用カスタムビュー ---
-// 勝ち/負け/引き分けの割合で色分けした半円グラフを表示。下にパーセント数値も表示。
-// *** 修正：GeometryReader内のZStackの背景円とArcShapeの描画処理を見直し、重複描画を回避し、
-// 半円グラフが綺麗に１つだけ表示されるように調整しました。具体的にはframeとpositionを修正。***
-
 struct HalfPieChart: View {
     var winRate: Double
     var loseRate: Double
@@ -824,19 +778,16 @@ struct HalfPieChart: View {
             let startAngle = Angle(degrees: 180)
             
             ZStack {
-                // Background arc (gray)
                 ArcShape(startAngle: startAngle, endAngle: startAngle + Angle(degrees: 180))
                     .stroke(Color.gray.opacity(0.2), lineWidth: 30)
                     .frame(width: diameter, height: diameter)
                 
-                // Win slice (green)
                 if angles[0] > 0 {
                     ArcShape(startAngle: startAngle, endAngle: startAngle + Angle(degrees: 180 * angles[0]))
                         .stroke(Color.green, lineWidth: 30)
                         .frame(width: diameter, height: diameter)
                 }
                 
-                // Lose slice (red)
                 if angles[1] > 0 {
                     ArcShape(
                         startAngle: startAngle + Angle(degrees: 180 * angles[0]),
@@ -846,7 +797,6 @@ struct HalfPieChart: View {
                     .frame(width: diameter, height: diameter)
                 }
                 
-                // Draw slice (gray)
                 if angles[2] > 0 {
                     ArcShape(
                         startAngle: startAngle + Angle(degrees: 180 * (angles[0] + angles[1])),
@@ -862,14 +812,12 @@ struct HalfPieChart: View {
     }
 }
 
-// 半円のArc形状（Stroke用）
 struct ArcShape: Shape {
     var startAngle: Angle
     var endAngle: Angle
     
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        // 半円の中心は矩形の下中央に設定
         let radius = min(rect.width, rect.height * 2) / 2
         let center = CGPoint(x: rect.midX, y: rect.maxY)
         
@@ -881,7 +829,6 @@ struct ArcShape: Shape {
     }
 }
 
-// --- 各率表示用小ビュー ---
 struct StatLegend: View {
     var color: Color
     var label: String
@@ -902,8 +849,6 @@ struct StatLegend: View {
     }
 }
 
-
-// MARK: - Extension for GameResult display text
 extension GameResult {
     var displayText: String {
         switch self {

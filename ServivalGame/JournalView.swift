@@ -8,7 +8,6 @@ struct JournalView: View {
     @State private var editTargetIndex: Int? = nil
     @State private var expandedEntryID: UUID? = nil
 
-    // Fields for new entry and editing (shared)
     @State private var fieldName: String = ""
     @State private var date: Date = Date()
     let gameModes = ["フラッグ戦", "殲滅戦", "占領戦", "カウンター戦", "ポリタンク輸送戦", "大統領選", "カスタム(自分で入力)"]
@@ -110,8 +109,6 @@ struct JournalView: View {
                         .ignoresSafeArea()
                 }
             )
-//            .navigationTitle("記録")
-//            .toolbarColorScheme(.dark)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -142,7 +139,6 @@ struct JournalView: View {
                 entries = decodedEntries
             }
         }
-        // Add Entry Sheet
         .sheet(isPresented: $isShowingAddEntry) {
             NavigationView {
                 entryFormView(
@@ -172,7 +168,6 @@ struct JournalView: View {
                 .foregroundColor(.white)
             }
         }
-        // Edit Entry Sheet
         .sheet(isPresented: $isShowingEditEntry) {
             NavigationView {
                 entryFormView(
@@ -342,7 +337,6 @@ struct JournalView: View {
                 .pickerStyle(SegmentedPickerStyle())
             }
             Section(header: Text("使用武器").foregroundColor(.white)) {
-                // Owned guns quick-pick (same as before, but add to multi-select)
                 if !ownedGuns.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -380,7 +374,6 @@ struct JournalView: View {
                         .foregroundColor(.white)
                 }
 
-                // Selected weapons chips with tap-to-remove
                 if !selectedWeapons.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -402,7 +395,6 @@ struct JournalView: View {
                     }
                 }
 
-                // Search field (like equipment tab) + API-driven suggestions
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("名前で検索 (例: M4, グロック)", text: $weaponQuery)
                         .autocapitalization(.none)
@@ -412,7 +404,6 @@ struct JournalView: View {
                             guard !trimmed.isEmpty else { return }
                             Task {
                                 await queryWeapons(keyword: trimmed)
-                                // 送信語と完全一致する候補があれば即追加、なければ候補から選んでもらう
                                 if let exact = searchResults.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
                                     if !selectedWeapons.contains(exact.name) { selectedWeapons.append(exact.name) }
                                     weaponQuery = ""
@@ -450,14 +441,12 @@ struct JournalView: View {
                             .foregroundColor(.white.opacity(0.7))
                     }
 
-                    // Error message
                     if let err = lastSearchError, !err.isEmpty {
                         Text(err)
                             .font(.caption)
                             .foregroundColor(.red)
                     }
 
-                    // No results message and fallback add button
                     if !isSearchingWeapons && !weaponQuery.isEmpty && searchResults.isEmpty && lastSearchError == nil {
                         Text("候補は見つかりませんでした（\(lastSearchedKeyword)）")
                             .font(.caption)
@@ -476,7 +465,6 @@ struct JournalView: View {
                     }
 
                     if !searchResults.isEmpty {
-                        // Show suggestions list
                         LazyVStack(alignment: .leading, spacing: 8) {
                             ForEach(searchResults) { gun in
                                 Button(action: {

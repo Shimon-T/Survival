@@ -1,5 +1,5 @@
 import SwiftUI
-import MapKit //地図や位置情報を扱うためのクラスや機能を提供
+import MapKit
 import CoreLocation
 import Combine
 
@@ -25,17 +25,17 @@ struct FieldAnnotation: Identifiable {
 enum SheetState { case min, mid, max, other }
 
 struct FieldSearchView: View {
-    @State private var locationManager = CLLocationManager()//デバイスの位置情報や方向を管理するクラス
+    @State private var locationManager = CLLocationManager()
     @State private var locationDelegate: LocationDelegate? = nil
-    @State private var coordinateRegion = MKCoordinateRegion(//地図の表示領域を指定するための状態変数
+    @State private var coordinateRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(
             latitude: 35.6809591,
             longitude: 139.7673068
-        ), //東京の座標
-        latitudinalMeters: 10000, //表示範囲。緯度10km
-        longitudinalMeters: 10000 //表示範囲。経度10km
+        ),
+        latitudinalMeters: 10000,
+        longitudinalMeters: 10000
     )
-    @State private var userTrackingMode: MapUserTrackingMode = .follow //ユーザーの位置追跡モード。.followで、ユーザーの位置を地図上で追跡。
+    @State private var userTrackingMode: MapUserTrackingMode = .follow
     @State private var lastKnownLocation: CLLocationCoordinate2D? = nil
     
     @State private var sheetOffset: CGFloat = 0
@@ -78,16 +78,15 @@ struct FieldSearchView: View {
 
             ZStack(alignment: .topTrailing) {
                 ZStack(alignment: .bottomTrailing) {
-                    Map( //Mapビュー
-                        coordinateRegion: $coordinateRegion, //MKCoordinateRegionの状態を指定（必須）
-                        interactionModes: .all, //パンとズームの許可
-                        showsUserLocation: true, //現在位置の表示
+                    Map(
+                        coordinateRegion: $coordinateRegion,
+                        interactionModes: .all,
+                        showsUserLocation: true,
                         userTrackingMode: $userTrackingMode,
                         annotationItems: fieldAnnotations
                     ) { annotation in
                         MapAnnotation(coordinate: annotation.coordinate) {
                             Button(action: {
-                                // Find the corresponding field
                                 if let field = (allFields + searchResults).first(where: { $0.id == annotation.id }) {
                                     selectedField = field
                                 }
@@ -98,14 +97,13 @@ struct FieldSearchView: View {
                                     .frame(width: 32, height: 32)
                                     .foregroundColor(.red)
                                     .shadow(radius: 4)
-                                    .alignmentGuide(.top) { d in d[.bottom] } // ピンの先端を座標に合わせる
+                                    .alignmentGuide(.top) { d in d[.bottom] }
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .edgesIgnoringSafeArea(.all) //セーフエリアを除外
+                    .edgesIgnoringSafeArea(.all)
                     
-                    // Sheet
                     VStack(spacing: 16) {
                         Capsule()
                             .frame(width: 40, height: 5)
@@ -154,14 +152,6 @@ struct FieldSearchView: View {
                                                     .font(.caption)
                                                     .foregroundColor(.accentColor)
                                             }
-                                            // Optionally, display image using AsyncImage here if desired:
-                                            // AsyncImage(url: URL(string: field.imageURL)) { image in
-                                            //     image.resizable()
-                                            // } placeholder: {
-                                            //     Color.gray.opacity(0.3)
-                                            // }
-                                            // .frame(width: 60, height: 60)
-                                            // .clipShape(RoundedRectangle(cornerRadius: 8))
                                             Spacer()
                                         }
                                         .padding()
@@ -215,7 +205,6 @@ struct FieldSearchView: View {
                             .onEnded { value in
                                 let newOffset = sheetOffset + value.translation.height * -1
                                 let positions = [minHeight, midHeight, maxHeight]
-                                // Find nearest position
                                 let nearest = positions.min(by: { abs($0 - newOffset) < abs($1 - newOffset) }) ?? midHeight
                                 withAnimation {
                                     sheetOffset = nearest
@@ -261,7 +250,6 @@ struct FieldSearchView: View {
                     .padding(.top, 32)
                     .padding(.trailing, 16)
                 }
-                // sheetState == .max or .otherでは非表示
             }
         }
         .onAppear{
@@ -270,8 +258,8 @@ struct FieldSearchView: View {
             }
             locationDelegate = delegate
             locationManager.delegate = delegate
-            locationManager.requestWhenInUseAuthorization() //位置情報を使用する許可を求める為に使用
-            locationManager.startUpdatingLocation() //デバイスの現在位置の更新を開始するために使用
+            locationManager.requestWhenInUseAuthorization()
+            locationManager.startUpdatingLocation()
             loadAllFields()
         }
         .sheet(item: $selectedField) { field in
@@ -382,7 +370,6 @@ private class LocationDelegate: NSObject, CLLocationManagerDelegate {
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        // エラー処理は必要に応じて実装可能
     }
 }
 
@@ -392,7 +379,6 @@ struct ContentView_Previews: PreviewProvider {
     }
 }
 
-// CornerRadius extension for specific corners
 fileprivate extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
         clipShape( RoundedCorner(radius: radius, corners: corners) )

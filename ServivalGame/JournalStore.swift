@@ -1,6 +1,3 @@
-// JournalStore.swift
-// 共通の記録（エントリー）配列を管理し、UserDefaultsに永続化するObservableObject
-
 import Foundation
 import Combine
 

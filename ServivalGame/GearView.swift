@@ -15,7 +15,7 @@ struct ForegroundCutoutImage: View {
     let imageUrl: URL
     @State private var processedImage: UIImage?
     @State private var isProcessing = false
-    private let outlineRadius: CGFloat = 1 // 枠線の太さ（ピクセル相当）
+    private let outlineRadius: CGFloat = 1
 
     var body: some View {
         Group {
@@ -23,7 +23,6 @@ struct ForegroundCutoutImage: View {
                 Image(uiImage: processedImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    // Removed overlay of RoundedRectangle
             } else {
                 AsyncImage(url: imageUrl) { image in
                     image.resizable().aspectRatio(contentMode: .fit)
@@ -53,11 +52,9 @@ struct ForegroundCutoutImage: View {
                     isProcessing = false
                     return
                 }
-                // 全てのインスタンス（前景全体）でマスク生成
                 let mask = try firstObservation.generateScaledMaskForImage(forInstances: firstObservation.allInstances, from: handler)
                 let ciImage = CIImage(cgImage: cgImage)
                 let maskImage = CIImage(cvPixelBuffer: mask)
-                // --- 前景切り抜きを作成 ---
                 let compositor = CIFilter.blendWithMask()
                 compositor.inputImage = ciImage
                 compositor.backgroundImage = CIImage(color: .clear).cropped(to: ciImage.extent)
@@ -68,13 +65,10 @@ struct ForegroundCutoutImage: View {
                     return
                 }
 
-                // --- マスクの輪郭から細い線(アウトライン)を生成 ---
-                // 膨張(dilate)と収縮(erode)の差分＝輪郭帯
                 let dilated = maskImage.applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: outlineRadius])
                 let eroded  = maskImage.applyingFilter("CIMorphologyMinimum", parameters: [kCIInputRadiusKey: outlineRadius])
                 let outlineBand = dilated.applyingFilter("CIDifferenceBlendMode", parameters: [kCIInputBackgroundImageKey: eroded])
 
-                // 指定色( Color(red:245/25, green:245/255, blue:245/255) )でアウトラインを作成
                 let strokeCIColor = CIColor(red: 245.0/25.0, green: 245.0/255.0, blue: 245.0/255.0, alpha: 1)
                 let strokeImage = CIImage(color: strokeCIColor).cropped(to: ciImage.extent)
                 let strokeBlend = CIFilter.blendWithMask()
@@ -158,7 +152,6 @@ struct GearView: View {
     }
     @State private var isPresentingSearch: Bool = false
 
-    // Custom initializer to optionally present weapon search immediately
     init(startWithAddGear: Bool = false) {
         _isPresentingSearch = State(initialValue: startWithAddGear)
     }
@@ -224,7 +217,6 @@ struct GearView: View {
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 reloadOwnedGuns()
                             } else {
-                                // 既に登録済み（同一アイテム）
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 reloadOwnedGuns()
                             }
@@ -339,7 +331,6 @@ struct CategoryDetailView: View {
         return unique
     }
 
-    // Helper to count usage of a gun in journal entries
     private func usageCount(for gun: Gun) -> Int {
         journalEntries.reduce(0) { count, entry in
             count + entry.weapons.filter { $0 == gun.name }.count
@@ -625,7 +616,6 @@ struct WeaponSearchView: View {
             do {
                 let decodedGuns = try JSONDecoder().decode([Gun].self, from: data)
                 let uniqueResults = dedup(decodedGuns)
-                // 🔎 サーバー側で既に検索済み。重複だけ除去して表示
                 DispatchQueue.main.async {
                     self.searchResults = uniqueResults
                     print("✅ Decoded guns: \(decodedGuns.count) → unique: \(uniqueResults.count)")
@@ -668,7 +658,6 @@ struct WeaponSearchView: View {
                                         height: UIScreen.main.bounds.height * 0.5
                                     )
                                 VStack(spacing: 10) {
-                                    // Conditional frame for grenade/other or others
                                     if gun.type == "グレネード" || gun.type == "その他" {
                                         ForegroundCutoutImage(imageUrl: url)
                                             .frame(height: 200)
@@ -763,7 +752,6 @@ struct WeaponSearchView: View {
             let knobOffset: CGFloat = isAlreadyAdded ? knobOffsetLeft : knobOffsetRight
             let textOffset: CGFloat = isAlreadyAdded ? -30 : 30
 
-            // Report progress upward
             onProgress?(normalized)
 
             return ZStack {
