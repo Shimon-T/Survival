@@ -22,6 +22,8 @@ struct JournalView: View {
     @State private var lastSearchError: String? = nil
     @State private var weaponSearchTask: Task<Void, Never>? = nil
 
+    @State private var result: GameResult = .unknown
+
     @AppStorage("savedGuns") private var savedGunsData: Data = Data()
     @AppStorage("journalEntries") private var savedJournalEntriesData: Data = Data()
     @State private var ownedGuns: [Gun] = []
@@ -62,6 +64,9 @@ struct JournalView: View {
                                     .foregroundColor(.white)
                                 if expandedEntryID == entry.id {
                                     Divider()
+                                    Text("勝敗: \(entry.result.rawValue)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white)
                                     if !entry.gameContent.isEmpty {
                                         Text("ゲーム内容: \(entry.gameContent)")
                                             .font(.subheadline)
@@ -151,7 +156,8 @@ struct JournalView: View {
                             date: date,
                             fieldName: fieldName,
                             gameContent: content,
-                            weapons: selectedWeapons
+                            weapons: selectedWeapons,
+                            result: result
                         )
                         entries.append(entry)
                         persistEntries()
@@ -182,7 +188,8 @@ struct JournalView: View {
                             date: date,
                             fieldName: fieldName,
                             gameContent: content,
-                            weapons: selectedWeapons
+                            weapons: selectedWeapons,
+                            result: result
                         )
                         entries[index] = editedEntry
                         persistEntries()
@@ -218,6 +225,7 @@ struct JournalView: View {
         weaponQuery = ""
         searchResults = []
         date = entry.date
+        result = entry.result
         if gameModes.contains(entry.gameContent) {
             selectedGameMode = entry.gameContent
             customGameContent = ""
@@ -244,6 +252,7 @@ struct JournalView: View {
         searchHint = ""
         weaponSearchTask?.cancel()
         weaponSearchTask = nil
+        result = .unknown
     }
 
     private func persistEntries() {
@@ -320,6 +329,14 @@ struct JournalView: View {
                         .autocapitalization(.none)
                         .foregroundColor(.white)
                 }
+            }
+            Section(header: Text("勝敗").foregroundColor(.white)) {
+                Picker("勝敗", selection: $result) {
+                    ForEach(GameResult.allCases) { r in
+                        Text(r.rawValue).tag(r)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
             }
             Section(header: Text("使用武器").foregroundColor(.white)) {
                 // Owned guns quick-pick (same as before, but add to multi-select)

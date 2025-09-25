@@ -9,6 +9,7 @@ import SwiftUI
 import Vision
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import UIKit
 
 struct ForegroundCutoutImage: View {
     let imageUrl: URL
@@ -116,6 +117,28 @@ extension UIImage {
     }
 }
 
+struct Gun: Identifiable, Codable {
+    let id: String
+    let name: String
+    let type: String
+    let maker: String
+    let imageURL: String?
+    let ageRating: Int?
+    let siteURL: String?
+
+    var imageURLValue: URL? {
+        if let urlString = imageURL {
+            return URL(string: urlString)
+        }
+        return nil
+    }
+
+    var identityKey: String {
+        "\(id)|\(name)|\(maker)"
+    }
+}
+
+
 struct GearView: View {
     let iconNames: [String: String] = [
         "ハンドガン": "icon_handgun",
@@ -198,14 +221,17 @@ struct GearView: View {
                             }
                             if !ownedGuns.contains(where: { $0.identityKey == categorizedGun.identityKey }) {
                                 ownedGuns.append(categorizedGun)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 reloadOwnedGuns()
                             } else {
                                 // 既に登録済み（同一アイテム）
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 reloadOwnedGuns()
                             }
                         },
                         onWeaponRemoved: { gun in
                             ownedGuns.removeAll(where: { $0.identityKey == gun.identityKey })
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             reloadOwnedGuns()
                         },
                         dismiss: {
@@ -231,13 +257,7 @@ struct GearView: View {
             if let decoded = try? JSONDecoder().decode([Gun].self, from: savedGunsData), !decoded.isEmpty {
                 ownedGuns = decoded
             } else {
-                ownedGuns = [
-                    Gun(id: "test1", name: "M4A1", type: "アサルト", maker: "SampleMaker", imageURL: nil, ageRating: 10, siteURL: nil as String?),
-                    Gun(id: "test2", name: "グロック17", type: "ハンドガン", maker: "SampleMaker", imageURL: nil, ageRating: 10, siteURL: nil as String?)
-                ]
-                if let encoded = try? JSONEncoder().encode(ownedGuns) {
-                    savedGunsData = encoded
-                }
+                ownedGuns = []
             }
         }
     }
@@ -255,6 +275,7 @@ struct GearView: View {
 
                 NavigationLink(destination: CategoryDetailView(category: category, ownedGuns: $ownedGuns, onRemove: { gun in
                     ownedGuns.removeAll { $0.identityKey == gun.identityKey }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     reloadOwnedGuns()
                 })) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -300,6 +321,11 @@ struct CategoryDetailView: View {
     let category: String
     @Binding var ownedGuns: [Gun]
     let onRemove: (Gun) -> Void
+    @AppStorage("journalEntries") private var savedJournalEntriesData: Data = Data()
+
+    private var journalEntries: [JournalEntry] {
+        (try? JSONDecoder().decode([JournalEntry].self, from: savedJournalEntriesData)) ?? []
+    }
 
     private var guns: [Gun] {
         var seen = Set<String>()
@@ -311,6 +337,13 @@ struct CategoryDetailView: View {
             }
         }
         return unique
+    }
+
+    // Helper to count usage of a gun in journal entries
+    private func usageCount(for gun: Gun) -> Int {
+        journalEntries.reduce(0) { count, entry in
+            count + entry.weapons.filter { $0 == gun.name }.count
+        }
     }
 
     var body: some View {
@@ -329,19 +362,47 @@ struct CategoryDetailView: View {
             } else {
                 List {
                     ForEach(guns, id: \.identityKey) { gun in
-                        HStack {
+                        let count = usageCount(for: gun)
+                        HStack(spacing: 12) {
                             if let imageUrl = gun.imageURLValue {
                                 ForegroundCutoutImage(imageUrl: imageUrl)
+                                    .frame(width: 70, height: 70)
+                            } else {
+                                Color.clear.frame(width: 70, height: 70)
                             }
-                            Text(gun.name)
-                                .font(.headline)
-                                .foregroundColor(.black)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(gun.name)
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(nil)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 12)
+
+                                Text("使用回数: \(count)回")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
+                                    .frame(maxWidth: 140)
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 12)
+                            }
                             Spacer()
                         }
+                        .frame(height: 60)
                         .padding()
-                        .background(Color(red: 245/255, green: 245/255, blue: 245/255))
+                        .background(
+                            LinearGradient(
+                                colors: [Color.gray.opacity(0.8), Color.black],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .cornerRadius(12)
-                        .shadow(radius: 1)
+                        .shadow(color: .black.opacity(0.05), radius: 2, x: 2, y: 2)
+                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
                         .padding(.horizontal)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
@@ -349,6 +410,7 @@ struct CategoryDetailView: View {
                             } label: {
                                 Label("削除", systemImage: "trash")
                             }
+                            .tint(.red)
                         }
                     }
                     .listRowSeparator(.hidden)
@@ -359,27 +421,6 @@ struct CategoryDetailView: View {
             Spacer(minLength: 0)
         }
         .navigationTitle(category)
-    }
-}
-
-struct Gun: Identifiable, Codable {
-    let id: String
-    let name: String
-    let type: String
-    let maker: String
-    let imageURL: String?
-    let ageRating: Int?
-    let siteURL: String?
-
-    var imageURLValue: URL? {
-        if let urlString = imageURL {
-            return URL(string: urlString)
-        }
-        return nil
-    }
-
-    var identityKey: String {
-        "\(id)|\(name)|\(maker)"
     }
 }
 
@@ -397,6 +438,7 @@ struct WeaponSearchView: View {
     
     @State private var isPresentingDetail: Bool = false
     @State private var selectedGun: Gun? = nil
+    @GestureState private var isPressed = false
 
     private var searchResultsView: some View {
         ScrollView {
@@ -415,14 +457,26 @@ struct WeaponSearchView: View {
                             }
                             Text(gun.name)
                                 .font(.headline)
-                                .foregroundColor(.black)
+                                .foregroundColor(.white)
                                 .multilineTextAlignment(.leading)
                             Spacer()
                         }
                         .padding()
-                        .background(Color(red: 245/255, green: 245/255, blue: 245/255))
+                        .background(
+                            LinearGradient(
+                                colors: [Color.gray.opacity(0.8), Color.black],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .cornerRadius(10)
+                        .scaleEffect(isPressed ? 0.95 : 1.0)
+                        .animation(.spring(), value: isPressed)
                     }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .updating($isPressed) { _, state, _ in state = true }
+                    )
                 }
             }
         }
@@ -740,6 +794,7 @@ struct WeaponSearchView: View {
                             }
                             .onEnded { _ in
                                 if offset > maxOffset - 8 {
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     if isAlreadyAdded {
                                         onRemove?()
                                     } else {
@@ -771,4 +826,19 @@ extension View {
     }
 }
 
+extension Text {
+    func outlinedText(strokeColor: Color = .black, strokeWidth: CGFloat = 2) -> some View {
+        ZStack {
+            self.foregroundColor(strokeColor).offset(x: strokeWidth, y: 0)
+            self.foregroundColor(strokeColor).offset(x: -strokeWidth, y: 0)
+            self.foregroundColor(strokeColor).offset(x: 0, y: strokeWidth)
+            self.foregroundColor(strokeColor).offset(x: 0, y: -strokeWidth)
+            self.foregroundColor(strokeColor).offset(x: strokeWidth, y: strokeWidth)
+            self.foregroundColor(strokeColor).offset(x: strokeWidth, y: -strokeWidth)
+            self.foregroundColor(strokeColor).offset(x: -strokeWidth, y: strokeWidth)
+            self.foregroundColor(strokeColor).offset(x: -strokeWidth, y: -strokeWidth)
+            self
+        }
+    }
+}
 

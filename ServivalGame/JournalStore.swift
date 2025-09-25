@@ -4,12 +4,21 @@
 import Foundation
 import Combine
 
+enum GameResult: String, Codable, CaseIterable, Identifiable {
+    case win = "勝利"
+    case lose = "敗北"
+    case draw = "引き分け"
+    case unknown = "未記録"
+    var id: String { self.rawValue }
+}
+
 struct JournalEntry: Codable, Identifiable {
     let id: UUID
     let date: Date
     let fieldName: String
     let gameContent: String
     let weapons: [String]
+    let result: GameResult
 }
 
 class JournalStore: ObservableObject {
@@ -49,4 +58,3 @@ class JournalStore: ObservableObject {
         }
     }
 }
-
